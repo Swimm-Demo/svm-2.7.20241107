@@ -1,0 +1,37 @@
+#!/bin/sh -x
+GREP=${GREP:-grep}
+SED=${SED:-sed}
+SUM=${SUM:-sum}
+echo "Using $GREP"
+echo "Using $SED"
+echo "Using $SUM"
+(
+(
+echo '#define SVM_API_SIGNATURE "_'
+(
+	cat $1 | ${SED} -n '/\/\// n;  /^SVM_TYPE / {s/[ \t]\+/ /g; p; } ; /^SVM_FUNCTION / { s/[ \t]\+/ /; p;};  /^SVM_TYPE_BEGIN$/ {x;}; /^SVM_TYPE_END$/ {x;y/\n/ /;s/^.*typedef/SVM_TYPE typedef/;s/[ \t]\+/ /g; p;}; /^SVM_/ !{H;}' | sort |
+	while read objet ;
+	do
+		objet=$(echo "$objet" | ${SED} 's/\/\*\([^*]\|\*[^/]\)*\*\// /g; s/ \+/ /g' )
+		echo "$objet" >&2
+		if echo "$objet" | ${GREP} '^SVM_TYPE' &>/dev/null ;
+		then
+			echo "$objet" | ${SED} 's/^.* //;s/;//' | ${SUM}  | tr -d ' \n'
+			echo ':'
+			echo "$objet" | ${SUM} | tr -d ' \n'
+		fi
+		if echo $objet | ${GREP} '^SVM_FUNCTION' &>/dev/null ;
+		then
+			echo "$objet" | ${SED} 's/; *//g' |
+			while read fonc ;
+			do 
+				echo "$fonc" | ${SED} 's/(.*$//' | ${SED} 's/^.* //' | ${SUM} | tr -d ' \n'
+				echo ':'
+				echo "$fonc" | ${SUM} | tr -d ' \n'
+			done
+		fi
+		echo '_'
+	done
+	echo '"'
+)
+) | tr -d '\n' ; echo ) >> $2

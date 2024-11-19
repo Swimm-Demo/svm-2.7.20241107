@@ -1,0 +1,12 @@
+{
+	dlopen+pthreads=<3
+	Memcheck:Leak
+	match-leak-kinds: reachable
+	fun:calloc
+	fun:_dlerror_run
+	fun:dlopen@@GLIBC_2.2.5
+	fun:_ZN3SVM7Machine9Extension12Gestionnaire12gestionnaireERKSt6vectorISsSaISsEE
+	fun:_ZN3SVM7Machine7Machine9executionEv
+	fun:main
+}
+

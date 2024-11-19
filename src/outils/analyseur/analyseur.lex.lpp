@@ -1,0 +1,118 @@
+/*
+ * Simple Virtual Machine - A versatile and robust architecture to
+ * easily write applications.
+ * Copyright (C) 2021  Julien BRUGUIER
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+%{
+#include <src/global/global.h>
+#include <src/outils/analyseur/includes.h>
+
+#define YY_USER_ACTION yylloc->first_line = yylloc->last_line;
+
+%}
+
+%option yy_scan_string
+%option nounput
+%option reentrant
+%option bison-bridge
+%option bison-locations
+%option noyywrap
+
+%s PARAM
+%s NOM
+
+%%
+<NOM>[a-z][a-z0-9_]*				{ yylval->chaine = std::string(yytext,yyleng); return IDENTIFIANT; }
+\"([^\\"\n]|\\.)*\"				{ std::string token(yytext,yyleng); yylval->chaine = SVM::Global::Chaine::desechappe(token.substr(1,token.size()-2)); return CHAINE; }
+\"([^\\"\n]|\\.)*\r?\n				{ return _INVALIDE_; }
+\%\{\ ?\%?\}					{ yylval->chaine = ""; return TEXTE; }
+\%\{\r?\n(\r?\n|\%\r?\n|[^%\n].*\r?\n|\%[^}\n].*\r?\n)*\%\}	{ std::string token(yytext,yyleng); yylloc->last_line+=std::count(token.begin(),token.end(),'\n'); yylval->chaine = (token.size()==5)?std::string():token.substr(3,token.size()-6); /*std::cerr << "{{{" << yylval->chaine << "}}}";*/ return TEXTE; }
+\$\{\ ?\$?\}					{ yylval->chaine = ""; return TEXTE; }
+\$\{\r?\n(\r?\n|\$\r?\n|[^$\n].*\r?\n|\$[^}\n].*\r?\n)*\$\}	{ std::string token(yytext,yyleng); yylloc->last_line+=std::count(token.begin(),token.end(),'\n'); yylval->chaine = (token.size()==5)?std::string():token.substr(3,token.size()-6); /*std::cerr << "{{{" << yylval->chaine << "}}}";*/ return TEXTE; }
+:\{\ ?:?\}					{ yylval->chaine = ""; return TEXTE; }
+:\{\r?\n(\r?\n|:\r?\n|[^:\n].*\r?\n|:[^}\n].*\r?\n)*:\}	{ std::string token(yytext,yyleng); yylloc->last_line+=std::count(token.begin(),token.end(),'\n'); yylval->chaine = (token.size()==5)?std::string():token.substr(3,token.size()-6); /*std::cerr << "{{{" << yylval->chaine << "}}}";*/ return TEXTE; }
+-[a-zA-Z0-9]					{ std::string token(yytext,yyleng); yylval->chaine = token.substr(1); return VALEUR_OPTION; }
+<NOM>INT					{ return TYPE_ENTIER; }
+<NOM>STR					{ return TYPE_CHAINE; }
+<NOM>BLN					{ return TYPE_BOOLEEN; }
+<PARAM>.*					{ yylval->chaine=std::string(yytext,yyleng); ;BEGIN(INITIAL); return PARAMETRES; }
+PLUGIN						{ BEGIN(NOM); return PLUGIN; }
+USE						{ return USE; }
+DEFINE						{ return DEFINE; }
+TYPE						{ BEGIN(NOM); return TYPE; }
+STRUCT						{ BEGIN(NOM); return STRUCT; }
+INSTRUCTION					{ BEGIN(PARAM); return INSTRUCTION; }
+FUNCTION					{ BEGIN(PARAM); return FUNCTION; }
+INTERRUPTION					{ BEGIN(NOM); return INTERRUPTION; }
+SEQUENCER					{ BEGIN(NOM); return SEQUENCER; }
+SCHEDULER					{ BEGIN(NOM); return SCHEDULER; }
+OPTION						{ BEGIN(NOM); return OPTION; }
+ARGUMENT					{ BEGIN(NOM); return ARGUMENT; }
+ARGUMENTS					{ BEGIN(NOM); return ARGUMENTS; }
+WAITING						{ return WAITING; }
+SYSTEM						{ return SYSTEM; }
+OVERRIDE					{ return OVERRIDE; }
+<INITIAL>attach					{ return ATTACH; }
+<INITIAL>author					{ return AUTHOR; }
+<INITIAL>changelog				{ return CHANGELOG; }
+<INITIAL>checks					{ return CHECKS; }
+<INITIAL>code					{ return CODE; }
+<INITIAL>comment				{ BEGIN(NOM); return COMMENT; }
+<INITIAL>compile				{ return COMPILE; }
+<INITIAL>constant				{ return CONSTANT; }
+<INITIAL>copy					{ return COPY; }
+<INITIAL>compare				{ return COMPARE; }
+<INITIAL>create					{ return CREATE; }
+<INITIAL>current				{ return CURRENT; }
+<INITIAL>date					{ return DATE; }
+<INITIAL>default				{ return DEFAULT; }
+<INITIAL>delete					{ return DELETE; }
+<INITIAL>description				{ return DESCRIPTION; }
+<INITIAL>detach					{ return DETACH; }
+<INITIAL>example				{ return EXAMPLE; }
+<INITIAL>file					{ BEGIN(NOM); return EXTRA_FILE; }
+<INITIAL>finalisation				{ return FINALISATION; }
+<INITIAL>help					{ return HELP; }
+<INITIAL>includes				{ return INCLUDES; }
+<INITIAL>initialisation				{ return INITIALISATION; }
+<INITIAL>lang					{ return LANG; }
+<INITIAL>license				{ return LICENSE; }
+<INITIAL>link					{ return LINK; }
+<INITIAL>maintainer				{ return MAINTAINER; }
+<INITIAL>news					{ return NEWS; }
+<INITIAL>notification				{ return NOTIFICATION; }
+<INITIAL>object					{ return OBJECT; }
+<INITIAL>patch					{ return PATCH; }
+<INITIAL>print					{ return PRINT; }
+<INITIAL>readme					{ return README; }
+<INITIAL>schedule				{ return SCHEDULE; }
+<INITIAL>seealso				{ return SEEALSO; }
+<INITIAL>shell					{ return SHELL; }
+<INITIAL>startup				{ return STARTUP; }
+<INITIAL>string					{ return STRING; }
+<INITIAL>synopsis				{ return SYNOPSIS; }
+<INITIAL>test					{ return TEST; }
+<INITIAL>title					{ return TITLE; }
+<INITIAL>usage					{ return USAGE; }
+<INITIAL>version				{ return PLUGIN_VERSION; }
+\.						{ return POINT; }
+:						{ BEGIN(INITIAL); return DEUX_POINTS; }
+[ \t]						{ }
+<INITIAL>#.*\r?\n				{ ++yylloc->last_line; }
+\r?\n						{ ++yylloc->last_line; /* nouvelle ligne */ BEGIN(INITIAL); return FIN_LIGNE; }
+.						{ return _INVALIDE_; }
+%%

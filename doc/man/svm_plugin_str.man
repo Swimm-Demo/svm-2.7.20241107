@@ -1,0 +1,124 @@
+.TH "Simple Virtual Machine - Official plugin str" 7 "2020-12-10"
+.SH SYNOPSIS
+.B svm_plugin_str
+\- Simple Virtual Machine official plugin for string management. 
+.SH DESCRIPTION
+This plugin introduces extra features to manage built-in type
+.B STR
+values.
+.SH INVOKATION
+This plugin can be added to the Simple Virtual Machine using the directive:
+.nf
+
+PLUGIN "svmstr.so"
+
+.fi
+.SH CONTENT
+.SS TYPE str.pattern
+This type contains a compiled regular expression.
+This type supports copy, constant construction and print operations.
+.SS INSTRUCTION str.char INT : ascii_code -> STR
+This instruction converts an ASCII code into a string containing the corresponding character.
+If the integer is not a valid ASCII code, a FAILURE interruption will be raised.
+.SS INSTRUCTION str.cmp STR [ < > = <> <= => ] STR -> BLN
+This instruction compares two strings in the lexical order.
+<> denotes the difference between two strings.
+.SS INSTRUCTION str.find STR [ STR str.pattern ] : pattern MUTABLE INT : position MUTABLE INT : size ? -> BLN
+This instruction finds in the first parameter the first sub-string matching the pattern.
+If a sub-string has been found, the instruction returns TRUE, the position and the size of the substring are written in the two last parameters.
+Otherwise, the instruction returns FALSE.
+.SS INSTRUCTION str.index STR INT : index -> INT : ascii_code
+This instruction returns a character from a string as the corresponding ASCII code.
+The first character of the string has the index 0.
+If the index is outside the string, the FAILURE interruption will be raised.
+.SS INSTRUCTION str.change MUTABLE STR INT : index INT : ascii_code
+This instruction changes one character within the string passed as first parameter.
+The second parameter indicates the index and the third one the ASCII code of the new character.
+When the index or the character is invalid, a FAILURE interruption is raised.
+.SS INSTRUCTION str.prepend MUTABLE STR INT : ascii_code
+This instruction adds one character to the beginning of the string passed as first parameter.
+The second parameter indicates the ASCII code of the added character.
+When the character is invalid, a FAILURE interruption is raised.
+.SS INSTRUCTION str.append MUTABLE STR INT : ascii_code
+This instruction adds one character to the end of the string passed as first parameter.
+The second parameter indicates the ASCII code of the added character.
+When the character is invalid, a FAILURE interruption is raised.
+.SS INSTRUCTION str.remove MUTABLE STR INT : index
+This instruction removes one character from the string passed as first parameter.
+The second parameter indicates the index of the character to be removed.
+When the index is invalid, a FAILURE interruption is raised.
+.SS INSTRUCTION str.join ( PTR : array_of_strings | STR + | STR : separator { ( PTR : array_of_strings | STR + ) } ) -> STR
+This instruction concatenates several strings into joined one.
+The strings to concatenate can be specified through a pointer or a list of strings.
+When a string followed by curved braces is present, the strings specified within the curved braces are separated by the first string, used as a separator.
+.SS INSTRUCTION str.pattern STR : pattern -> str.pattern
+This instruction returns a compiled regular expression from a string.
+If the string does not represent a valid pattern, a FAILURE interruption will be raised.
+.SS INSTRUCTION str.regex STR [ STR str.pattern ] : pattern -> PTR
+This instruction returns from the first string all the sub-strings matching the pattern.
+The instruction writes the result in the memory and returns the corresponding pointer.
+.SS INSTRUCTION str.replace MUTABLE STR [ INT 'ALL' ] : occurence [ STR str.pattern ] : pattern_old => STR : new
+This instruction replaces in the first string - in place - some sub-strings matching a pattern par another string.
+The integer allows replacement one occurence when a positive integer is provided, or all occurences if the ALL keyword is provided.
+.SS INSTRUCTION str.size STR -> INT
+This instruction returns the string size in bytes.
+.SS INSTRUCTION str.split STR [ STR str.pattern ] : separator_pattern -> PTR
+This instruction returns all sub-strings between two pattern matches.
+The instruction writes the result in the memory and returns the corresponding pointer.
+.SS INSTRUCTION str.sub STR INT : offset INT : size 'END' : origin_at_end ? -> STR
+This instruction returns a sub-string by position and size.
+The position origin is placed at the end of the string if the END keyword is specified, or at the begining of the string otherwise.
+If the size is a negative number, a FAILURE interruption will be raised.
+A negative position is allowed.
+When the position and/or the size indicates a region outside the string, the parts outside the string are represented by no characters and the returned string can be shorter than the expected size.
+.SS INSTRUCTION str.format ( VALUE | { PEP . * } ) + -> STR
+This instruction creates a string containing the concatenated string representation of values and string representation of the value returned by plugin functions.
+.P
+A plugin function is specified between { and }, the first PEP being the name of the function and the rest being the function parameters.
+.SS FUNCTION str.pattern STR : pattern -> str.pattern
+This function returns a compiled regular expression from a string.
+If the string does not represent a valid pattern, a FAILURE interruption will be raised.
+.SS String functions
+.SS FUNCTION str.join ( PTR:array_of_strings | STR + | STR:separator { ( PTR:array_of_strings | STR + ) } ) -> STR 
+This function does the same operation as the corresponding instruction.
+.SS FUNCTION str.sub STR INT:offset INT:size 'END' ? -> STR 
+This function does the same operation as the corresponding instruction.
+.SS FUNCTION str.size STR -> INT 
+This function does the same operation as the corresponding instruction.
+.SS FUNCTION str.cmp STR [ < > = <> <= => ] STR -> BLN 
+This function does the same operation as the corresponding instruction.
+.SS FUNCTION str.format STR INT:size [ 'LEFT' 'CENTER' 'RIGHT' ] ? -> STR
+This function formats a string.
+For each line in the string, the text is put left (default alignement), centered or put right and the line has the requested size.
+.SH EXAMPLES
+.SS Join
+.nf
+	:memory STR*3/t
+	[ "a", "b", "c" ] -> t
+	:str.join "a" "b" # returns "ab"
+	:str.join t # returns "abc"
+	:str.join "," { "a" "b" } # returns "a,b"
+	:str.join "," { t } # returns "a,b,c"
+.fi
+.SS Replace
+.nf
+	:memory STR/s
+	"0123456789" -> &s
+	:str.replace @&s 1 CONST str.pattern "[456]" => "x" # s contains 0123X56789
+	:str.replace @&s ALL CONST str.pattern "[456]" => "x" # s contains 0123XXX789
+.fi
+.SS Sub-string
+.nf
+	:str.sub "0123456789" -2 5 # returns 012
+	:str.sub "0123456789" -3 5 END # returns 789
+.fi
+.SS Formatting
+.nf
+	:str.format "[" @&integer "]" -> &string
+	:str.format "|" { str.format @&string 40 CENTER } "|" -> &string
+.fi
+.SH SEE ALSO
+.BR svm (1)
+for help on the Simple Virtual Machine.
+.SH AUTHOR
+The Simple Virtual Machine is designed, implemented and maintained by Julien Bruguier <===EMAILCONTACT===>.

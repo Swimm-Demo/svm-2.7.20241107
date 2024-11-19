@@ -1,0 +1,42 @@
+<!--
+ Simple Virtual Machine - A versatile and robust architecture to
+ easily write applications.
+ Copyright (C) 2021  Julien BRUGUIER
+ 
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+ 
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ 
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see <http://www.gnu.org/licenses/>.
+-->
+
+<html>
+	<head>
+		<title id="svm_title">SVM</title>
+		<meta charset="utf-8"/>
+		<link rel="icon" href="/favicon.ico" type="image/x-icon"/>
+		$STYLE$
+		<script src="/security.js"></script>
+		<script src="/windows.js"></script>
+		<script src="/controler.js"></script>
+		<script src="/seqdiag.js"></script>
+		<script src="/views.js"></script>
+	</head>
+	<body>
+		<div class="main_bar" id="svm_main_bar"><div class="menu_button">Menu</div><div id="svm_application" class="application"></div></div>
+		<div class="desktop" id="svm_desktop"></div>
+			
+	</body>
+	<script>
+	var svm_controler = new SVM_Controler(new WebSocket("ws://"+document.domain+":$PORT$"));
+	var svm_interface = new SVM_Interface(document.getElementById('svm_desktop'),document.getElementById('svm_main_bar'),document.getElementById('svm_application'),document.getElementById('svm_title'));
+
+	</script>
+</html>

@@ -1,0 +1,49 @@
+.TH "Simple Virtual Machine - Official plugin real" 7 "2020-12-10"
+.SH SYNOPSIS
+.B svm_plugin_real
+\- Simple Virtual Machine official plugin for real number management. 
+.SH DESCRIPTION
+This plugin introduces extra features to introduce and manage extended type
+.B real.number
+values.
+.SH INVOKATION
+This plugin can be added to the Simple Virtual Machine using the directive:
+.nf
+
+PLUGIN "svmreal.so"
+
+.fi
+.SH CONTENT
+.SS TYPE real.number
+This type contains a C double floating point number.
+This type supports copy, creation from constant and print.
+.SS INSTRUCTION real.add ( [ INT real.number ] [ INT real.number ] + | PTR ) -> real.number
+This instruction returns the sum of integers and real numbers.
+If a pointer is provided, the memory zone shall contain initialised integers and real numbers used to compute the sum, or a MEMORY interruption will be raised.
+.SS INSTRUCTION real.cmp [ INT real.number ] [ < > = <> <= => ] [ INT real.number ] -> BLN
+This instruction compares two integers or real numbers and returns the result of the comparison.
+<> denotes the difference between two numbers.
+.SS INSTRUCTION real.div [ INT real.number ] [ INT real.number ] -> real.number
+This instruction returns the quotien between the two parameters.
+The instruction raises a NUMERIC interruption when the divider is zero.
+.SS INSTRUCTION real.mul ( [ INT real.number ] [ INT real.number ] + | PTR ) -> real.number
+This instruction returns the product of the parameters.
+If a pointer is provided, the memory zone shall contain initialised integers or real numbers used to compute the product, or a MEMORY interruption will be raised.
+.SS INSTRUCTION real.parse STR -> real.number
+This instruction transforms a string into a real number.
+If the string does not contain only a real number, a NUMERIC interruption is raised.
+.SS INSTRUCTION real.print real.number ( INT INT ) ? -> STR
+This instruction transforms a real number into a string.
+The optional integers specify the format of the string: the first integer indicates the size of the string, and the second indicates the mantiss size.
+.SS INSTRUCTION real.sub [ INT real.number ] [ INT real.number ] -> real.number
+This instruction returns the difference between the two parameters.
+.SS FUNCTION real.parse STR -> real.number
+This function allows other plugins to create a real number of this plugin without having a dependency on the type representation.
+.SS FUNCTION real.format real.number INT:size INT:mantiss ? -> STR
+This function transforms a real number into a string.
+The optional integers specify the format of the string: the first integer indicates the size of the string, and the second indicates the mantiss size.
+.SH SEE ALSO
+.BR svm (1)
+for help on the Simple Virtual Machine.
+.SH AUTHOR
+The Simple Virtual Machine is designed, implemented and maintained by Julien Bruguier <===EMAILCONTACT===>.

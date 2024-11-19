@@ -1,0 +1,1151 @@
+/*
+ * Simple Virtual Machine - A versatile and robust architecture to
+ * easily write applications.
+ * Copyright (C) 2021  Julien BRUGUIER
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+%{
+#include <src/global/global.h>
+#define YYDEBUG 0
+#include <src/machine/elements/programme/analyseur/includes.h>
+
+
+extern int machineelementsprogrammeanalyseurerror(YYLTYPE *llocp, void *scanner, const std::string& nom, SVM_Valeur::CodeSP& code, SVM_Valeur::InterruptionSP& erreur, const SVM_Valeur::PositionInstructionSP& position, std::string mesg);
+extern int machineelementsprogrammeanalyseurlex(YYSTYPE *lvalp, YYLTYPE *llocp, void *scanner);
+extern int machineelementsprogrammeanalyseurlex_init(void *scanner);
+extern int machineelementsprogrammeanalyseurlex_destroy(void *scanner);
+
+namespace SVM_Programme = SVM::Machine::Element::Programme;
+namespace SVM_Instruction = SVM::Machine::Element::Processeur::Instruction;
+%}
+
+%locations
+%define api.pure full
+%define api.value.type { struct ValeurProgramme }
+%param { void *scanner }
+
+%parse-param { const std::string& nom }
+%parse-param { SVM_Valeur::CodeSP& code }
+%parse-param { SVM_Valeur::InterruptionSP& erreur }
+%parse-param { const SVM_Valeur::PositionInstructionSP& position }
+
+%initial-action { 
+#if YYDEBUG==1
+	machineelementsprogrammeanalyseurdebug=1;
+#endif
+}
+%code requires
+{
+
+struct ValeurProgramme
+{
+	long int entier;
+	std::string chaine;
+	bool booleen;
+	SVM_Valeur::InstructionSP instruction;
+	SVM_Programme::ValeurSP valeur;
+	SVM_Programme::LectureMemoireSP lecture_memoire;
+	SVM_Programme::AdresseSP adresse;
+	std::vector<SVM_Programme::ValeurSP> bloc;
+	SVM_Programme::CibleSP cible;
+	SVM_Programme::ConditionSP condition;
+	SVM_Valeur::ExpressionConditionSP expression_condition;
+	SVM_Valeur::PointEntreeExtension point_entree_extension;
+	SVM_Programme::ChaineSP chaine_immediate;
+	SVM_Programme::TypeSP type;
+	SVM_Programme::DescriptionBlocAliasSP types_avec_alias;
+	std::vector<SVM_Programme::DescriptionBlocAliasSP> liste_types_avec_alias;
+	SVM_Programme::DescriptionBlocSP types_anonymes;
+	std::vector<SVM_Programme::DescriptionBlocSP> liste_types_anonymes;
+	SVM_Programme::ParametreSP parametre;
+	std::vector<SVM_Programme::ParametreSP> liste_parametres;
+	SVM_Valeur::ParametreMarqueur::Marqueur marqueur;
+	SVM_Processeur::Instruction::DebogageArretMemoire::Type type_arret_memoire;
+};
+
+#   define YYCOPY(Dst, Src, Count)              \
+      do                                        \
+        {                                       \
+          YYSIZE_T yyi;                         \
+          for (yyi = 0; yyi < (Count); yyi++)   \
+            (Dst)[yyi] = (Src)[yyi];            \
+        }                                       \
+      while (0)
+}
+
+/*
+%destructor { } <*>
+*/
+
+%token _INVALIDE_
+%token<entier> ENTIER
+%token<chaine> IDENTIFIANT MOT_CLEF
+%token<chaine> CHAINE_MONOLIGNE
+%token<chaine> CHAINE_MULTILIGNE
+%token VRAI FAUX CONST POINTEUR_COURANT TAILLE CASCADE_MC GLOBAL_MC
+%token TYPE_ENTIER TYPE_CHAINE TYPE_BOOLEEN TYPE_POINTEUR TYPE_BIBLIOTHEQUE TYPE_SYMBOLE TYPE_POINT_ENTREE_EXTENSION TYPE_INTERRUPTION TYPE_AUTOMATIQUE
+%token INTERRUPTION_ECHEC INTERRUPTION_PROCESSEUR INTERRUPTION_MEMOIRE INTERRUPTION_TERMINAISON INTERRUPTION_NUMERIQUE INTERRUPTION_PREMIER INTERRUPTION_SECOND INTERRUPTION_SECURITE INTERRUPTION_PERIPHERIQUE INTERRUPTION_CLONE INTERRUPTION_TERMINAL INTERRUPTION_GENERIC
+%token DEBUT_PARENTHESE FIN_PARENTHESE DEBUT_CROCHET FIN_CROCHET DEBUT_ACCOLADE FIN_ACCOLADE VIRGULE
+%token PLUS MOINS FOIS DIVISION
+%token ADRESSE SYMBOLE LECTURE_MEMOIRE POINT EXCLAMATION INTERROGATION DEUX_POINTS
+%token INFERIEUR INFERIEUR_INFERIEUR SUPERIEUR SUPERIEUR_SUPERIEUR INFERIEUR_SUPERIEUR EGAL INFERIEUR_OU_EGAL SUPERIEUR_OU_EGAL POINT_VIRGULE
+%token QUAND PAS_QUAND LEVE DEFINI INITIALISE DANS EST APPELABLE DEBUGUEUR ARRET AJOUT ENLEVE LECTURE ECRITURE ACCES SUPPRESSION EXPLIQUE
+%token AFFECTATION INSTRUCTION_LABEL INSTRUCTION_SYMBOL INSTRUCTION_GOTO INSTRUCTION_CALL INSTRUCTION_RETURN INSTRUCTION_SHUTDOWN INSTRUCTION_LOCAL INSTRUCTION_SHIFT INSTRUCTION_LIBRARY INSTRUCTION_FLAG INSTRUCTION_INTERRUPTION INSTRUCTION_MEMORY INSTRUCTION_DEBUG
+%token FIN_LIGNE
+
+%type<instruction> instruction instruction_affectation instruction_saut instruction_appel instruction_retour instruction_arret instruction_local instruction_decalage instruction_bibliotheque instruction_drapeau instruction_interruption instruction_memoire instruction_debogage instruction_extension
+%type<valeur> valeur valeur_immediate entier entier_immediat chaine booleen booleen_immediat pointeur pointeur_immediat point_entree_extension point_entree_extension_immediat /*symbole*/ symbole_immediat interruption interruption_immediate
+%type<chaine_immediate> chaine_immediate;
+%type<lecture_memoire> lecture_memoire
+%type<adresse> adresse adresse_immediate
+%type<bloc> bloc liste_valeurs
+%type<cible> cible
+%type<condition> condition
+%type<expression_condition> expression_condition
+%type<point_entree_extension> point_entree_extension_pur
+%type<booleen> cascade globale
+%type<type> type_memoire
+%type<valeur> repetition
+%type<types_avec_alias> types_avec_alias
+%type<liste_types_avec_alias> liste_types_avec_alias
+%type<types_anonymes> types_anonymes
+%type<liste_types_anonymes> liste_types_anonymes
+%type<parametre> parametre
+%type<liste_parametres> liste_parametres
+%type<chaine> mot_clef 
+%type<marqueur> marqueur
+%type<type_arret_memoire> type_arret_memoire
+%type<booleen> operation
+%type<chaine> substitution_mot_clef substitution_instruction
+
+%start programme
+
+%%
+
+programme: liste_instructions
+{
+}
+;
+
+liste_instructions:
+{
+}
+| liste_instructions instruction FIN_LIGNE
+{
+	code->ajoute_instruction($2);
+}
+| liste_instructions ancre FIN_LIGNE
+{
+}
+| liste_instructions FIN_LIGNE
+{
+}
+;
+
+ancre: INSTRUCTION_LABEL IDENTIFIANT
+{
+	code->ajoute_etiquette($2);
+}
+| INSTRUCTION_SYMBOL IDENTIFIANT
+{
+	code->ajoute_symbole($2);
+}
+;
+
+instruction: instruction_affectation
+{
+	$$ = $1;
+}
+| instruction_saut
+{
+	$$ = $1;
+}
+| instruction_appel
+{
+	$$ = $1;
+}
+| instruction_retour
+{
+	$$ = $1;
+}
+| instruction_arret
+{
+	$$ = $1;
+}
+| instruction_local
+{
+	$$ = $1;
+}
+| instruction_decalage
+{
+	$$ = $1;
+}
+| instruction_bibliotheque
+{
+	$$ = $1;
+}
+| instruction_drapeau
+{
+	$$ = $1;
+}
+| instruction_interruption
+{
+	$$ = $1;
+}
+| instruction_memoire
+{
+	$$ = $1;
+}
+| instruction_debogage
+{
+	$$ = $1;
+}
+| instruction_extension
+{
+	$$ = $1;
+}
+;
+
+instruction_affectation: valeur AFFECTATION adresse
+{
+	$$ = std::make_shared<SVM_Instruction::AffectationValeur>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$1,$3);
+}
+| bloc AFFECTATION pointeur
+{
+	$$ = std::make_shared<SVM_Instruction::AffectationBloc>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$1,$3);
+}
+| instruction_bibliotheque AFFECTATION adresse
+{
+	$$ = std::make_shared<SVM_Instruction::AffectationInstruction>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$1,$3);
+}
+| instruction_memoire AFFECTATION adresse
+{
+	$$ = std::make_shared<SVM_Instruction::AffectationInstruction>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$1,$3);
+}
+| instruction_extension AFFECTATION adresse
+{
+	$$ = std::make_shared<SVM_Instruction::AffectationInstruction>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$1,$3);
+}
+;
+
+instruction_saut : INSTRUCTION_GOTO cible condition
+{
+	$$ = std::make_shared<SVM_Instruction::Saut>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$2,$3);
+}
+;
+
+instruction_appel : INSTRUCTION_CALL cible pointeur condition
+{
+	$$ = std::make_shared<SVM_Instruction::Appel>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$2,$3,$4);
+}
+;
+
+instruction_retour : INSTRUCTION_RETURN condition
+{
+	$$ = std::make_shared<SVM_Instruction::Retour>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$2);
+}
+| INSTRUCTION_RETURN ENTIER condition
+{
+	$$ = std::make_shared<SVM_Instruction::Retour>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$2,$3);
+}
+;
+
+instruction_arret : INSTRUCTION_SHUTDOWN condition
+{
+	$$ = std::make_shared<SVM_Instruction::ArretProcesseur>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$2);
+}
+| INSTRUCTION_SHUTDOWN entier condition
+{
+	$$ = std::make_shared<SVM_Instruction::ArretMachine>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$2,$3);
+}
+;
+
+instruction_local : INSTRUCTION_LOCAL cascade pointeur
+{
+	$$ = std::make_shared<SVM_Instruction::Local>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$2,$3);
+}
+;
+
+instruction_decalage: INSTRUCTION_SHIFT adresse
+{
+	$$ = std::make_shared<SVM_Instruction::Decalage>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$2);
+}
+| INSTRUCTION_SHIFT entier adresse
+{
+	$$ = std::make_shared<SVM_Instruction::Decalage>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$2,$3);
+}
+;
+
+instruction_bibliotheque: INSTRUCTION_LIBRARY chaine chaine
+{
+	$$ = std::make_shared<SVM_Instruction::Bibliotheque>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$2,$3);
+}
+
+instruction_drapeau: INSTRUCTION_FLAG chaine
+{
+	$$ = std::make_shared<SVM_Instruction::Drapeau>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$2);
+}
+|	INSTRUCTION_FLAG CASCADE_MC chaine
+{
+	$$ = std::make_shared<SVM_Instruction::Drapeau>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$3,true);
+}
+
+;
+
+instruction_interruption: INSTRUCTION_INTERRUPTION GLOBAL_MC interruption cible
+{
+	$$ = std::make_shared<SVM_Instruction::Interruption>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),true,false,$3,$4);
+}
+| INSTRUCTION_INTERRUPTION GLOBAL_MC interruption
+{
+	$$ = std::make_shared<SVM_Instruction::Interruption>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),true,false,$3);
+}
+| INSTRUCTION_INTERRUPTION CASCADE_MC interruption cible
+{
+	$$ = std::make_shared<SVM_Instruction::Interruption>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),false,true,$3,$4);
+}
+| INSTRUCTION_INTERRUPTION CASCADE_MC interruption
+{
+	$$ = std::make_shared<SVM_Instruction::Interruption>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),false,true,$3);
+}
+| INSTRUCTION_INTERRUPTION interruption cible
+{
+	$$ = std::make_shared<SVM_Instruction::Interruption>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),false,false,$2,$3);
+}
+| INSTRUCTION_INTERRUPTION interruption
+{
+	$$ = std::make_shared<SVM_Instruction::Interruption>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),false,false,$2);
+}
+
+;
+
+instruction_memoire: INSTRUCTION_MEMORY globale liste_types_avec_alias
+{
+	$$ = std::make_shared<SVM_Instruction::Memoire>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$2,$3);
+}
+;
+
+instruction_debogage: INSTRUCTION_DEBUG ARRET
+{
+	$$ = std::make_shared<SVM_Instruction::DebogageArretProcesseur>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position));
+}
+|	INSTRUCTION_DEBUG ARRET chaine
+{
+	$$ = std::make_shared<SVM_Instruction::DebogageArretProcesseur>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$3);
+}
+|	INSTRUCTION_DEBUG operation type_arret_memoire adresse
+{
+	$$ = std::make_shared<SVM_Instruction::DebogageArretMemoire>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$2,$3,$4);
+}
+|	INSTRUCTION_DEBUG EXPLIQUE adresse
+{
+	$$ = std::make_shared<SVM_Instruction::DebogageExplicationAdresse>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$3);
+}
+|	INSTRUCTION_DEBUG EXPLIQUE valeur
+{
+	$$ = std::make_shared<SVM_Instruction::DebogageExplicationValeur>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$3);
+}
+|	INSTRUCTION_DEBUG operation interruption
+{
+	$$ = std::make_shared<SVM_Instruction::DebogageArretInterruption>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$2,$3);
+}
+;
+
+instruction_extension: DEUX_POINTS point_entree_extension liste_parametres
+{
+	$$ = std::make_shared<SVM_Instruction::Extension>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),$2,$3);
+}
+| substitution_instruction POINT IDENTIFIANT liste_parametres
+{
+	$$ = std::make_shared<SVM_Instruction::Extension>(SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position),std::make_shared<SVM_Programme::PointEntreeExtension>(SVM_Valeur::PointEntreeExtension($1,$3)),$4);
+}
+;
+
+valeur: valeur_immediate
+{
+	$$ = $1;
+}
+| lecture_memoire
+{
+	$1->type_voulu([] (const SVM_Memoire::Type& type) -> bool { return true; },"any type");
+	$$ = $1;
+}
+;
+
+valeur_immediate: entier_immediat
+{
+	$$ = $1;
+}
+| chaine_immediate
+{
+	$$ = $1;
+}
+| booleen_immediat
+{
+	$$ = $1;
+}
+| pointeur_immediat
+{
+	$$ = $1;
+}
+| point_entree_extension_immediat
+{
+	$$ = $1;
+}
+| symbole_immediat
+{
+	$$ = $1;
+}
+| interruption_immediate
+{
+	$$ = $1;
+}
+| CONST point_entree_extension_pur chaine_immediate
+{
+	$$ = std::make_shared<SVM_Programme::ConstanteExtension>($2,$3,SVM_Valeur::PositionInstruction(nom,@$.first_line,@$.last_line,position));
+}
+;
+
+entier: entier_immediat
+{
+	$$ = $1;
+}
+| lecture_memoire
+{
+	$1->type_voulu([] (const SVM_Memoire::Type& type) -> bool { return type==SVM_Memoire::Type::TypeInterne::ENTIER; },"INT");
+	$$ = $1;
+}
+;
+
+entier_immediat: ENTIER
+{
+	$$ = std::make_shared<SVM_Programme::Entier>($1);
+}
+| MOINS ENTIER
+{
+	$$ = std::make_shared<SVM_Programme::Entier>(-$2);
+}
+| TAILLE pointeur
+{
+	$$ = std::make_shared<SVM_Programme::TaillePointeur>($2);
+}
+;
+
+chaine: chaine_immediate
+{
+	$$ = $1;
+}
+| lecture_memoire
+{
+	$1->type_voulu([] (const SVM_Memoire::Type& type) -> bool { return type==SVM_Memoire::Type::TypeInterne::CHAINE; },"STR");
+	$$ = $1;
+}
+;
+
+chaine_immediate: CHAINE_MONOLIGNE
+{
+	$$ = std::make_shared<SVM_Programme::Chaine>($1,false);
+}
+| CHAINE_MULTILIGNE
+{
+	$$ = std::make_shared<SVM_Programme::Chaine>($1,true);
+}
+;
+
+booleen: booleen_immediat
+{
+	$$ = $1;
+}
+| lecture_memoire
+{
+	$1->type_voulu([] (const SVM_Memoire::Type& type) -> bool { return type==SVM_Memoire::Type::TypeInterne::BOOLEEN; },"BLN");
+	$$ = $1;
+}
+;
+
+booleen_immediat: VRAI
+{
+	$$ = std::make_shared<SVM_Programme::Booleen>(true);
+}
+| FAUX
+{
+	$$ = std::make_shared<SVM_Programme::Booleen>(false);
+}
+| INTERROGATION expression_condition
+{
+	$$ = std::make_shared<SVM_Programme::BooleenCondition>($2);
+}
+;
+
+pointeur: pointeur_immediat
+{
+	$$ = $1;
+}
+| lecture_memoire
+{
+	$1->type_voulu([] (const SVM_Memoire::Type& type) -> bool { return type==SVM_Memoire::Type::TypeInterne::POINTEUR; },"PTR");
+	$$ = $1;
+}
+;
+
+pointeur_immediat : adresse FOIS entier
+{
+	auto a = std::dynamic_pointer_cast<SVM_Programme::AdresseConstante>($1);
+	auto t = std::dynamic_pointer_cast<SVM_Programme::Entier>($3);
+	if(static_cast<bool>(a) and static_cast<bool>(t))
+	{
+		size_t ra = *a;
+		long long int rt = *t;
+		if(rt<0)
+		{
+			std::ostringstream oss;
+			oss << "Invalid pointer size " << rt << ".";
+			return ::machineelementsprogrammeanalyseurerror(&@$,scanner,nom,code,erreur,position,oss.str());
+		}
+		$$ = std::make_shared<SVM_Programme::Pointeur>(ra,static_cast<size_t>(rt));
+	}
+	else
+	{
+		$$ = std::make_shared<SVM_Programme::PointeurConstruit>($1,$3);
+	}
+}
+| IDENTIFIANT
+{
+	$$ = std::make_shared<SVM_Programme::PointeurAlias>($1);
+}
+| POINTEUR_COURANT
+{
+	$$ = std::make_shared<SVM_Programme::PointeurCourant>();
+}
+;
+
+adresse: adresse_immediate
+{
+	$$ = $1;
+}
+| ADRESSE pointeur
+{
+	$$ = std::make_shared<SVM_Programme::AdresseDepuisPointeur>($2);
+}
+| DEBUT_PARENTHESE pointeur DIVISION entier FIN_PARENTHESE
+{
+	$$ = std::make_shared<SVM_Programme::AdresseDepuisIndicePointeur>($2,$4);
+}
+| DEBUT_PARENTHESE adresse PLUS entier FIN_PARENTHESE
+{
+	$$ = std::make_shared<SVM_Programme::AdresseDecalage>($2,1,$4);
+}
+| DEBUT_PARENTHESE adresse MOINS entier FIN_PARENTHESE
+{
+	$$ = std::make_shared<SVM_Programme::AdresseDecalage>($2,-1,$4);
+}
+;
+
+adresse_immediate: ADRESSE ENTIER
+{
+	$$ = std::make_shared<SVM_Programme::AdresseConstante>($2);
+}
+;
+
+/*
+symbole: symbole_immediat
+{
+	$$ = $1;
+}
+| lecture_memoire
+{
+	$1->type_voulu([] (const SVM_Memoire::Type& type) -> bool { return type==SVM_Memoire::Type::TypeInterne::SYMBOLE; },"SYM");
+	$$=$1;
+}
+;
+*/
+
+symbole_immediat: SYMBOLE chaine
+{
+	$$ = std::make_shared<SVM_Programme::SymboleLocal>($2);
+}
+| SYMBOLE DEBUT_PARENTHESE lecture_memoire DIVISION FIN_PARENTHESE
+{
+	$3->type_voulu([] (const SVM_Memoire::Type& type) -> bool { return type==SVM_Memoire::Type::TypeInterne::BIBLIOTHEQUE; },"LIB");
+	$$ = std::make_shared<SVM_Programme::SymboleDebut>($3);
+}
+| SYMBOLE DEBUT_PARENTHESE lecture_memoire DIVISION chaine FIN_PARENTHESE
+{
+	$3->type_voulu([] (const SVM_Memoire::Type& type) -> bool { return type==SVM_Memoire::Type::TypeInterne::BIBLIOTHEQUE; },"LIB");
+	$$ = std::make_shared<SVM_Programme::SymboleComplet>($3,$5);
+}
+;
+
+point_entree_extension: point_entree_extension_immediat
+{
+	$$ = $1;
+}
+| lecture_memoire
+{
+	$1->type_voulu([] (const SVM_Memoire::Type& type) -> bool { return type==SVM_Memoire::Type::TypeInterne::POINT_ENTREE_EXTENSION; },"PEP");
+	$$ = $1;
+}
+;
+
+point_entree_extension_immediat: point_entree_extension_pur
+{
+	$$ = std::make_shared<SVM_Programme::PointEntreeExtension>($1);
+}
+;
+
+point_entree_extension_pur: IDENTIFIANT POINT IDENTIFIANT
+{
+	$$ = SVM_Valeur::PointEntreeExtension($1,$3);
+}
+;
+
+interruption: interruption_immediate
+{
+	$$ = $1;
+}
+| lecture_memoire
+{
+	$1->type_voulu([] (const SVM_Memoire::Type& type) -> bool { return type==SVM_Memoire::Type::TypeInterne::INTERRUPTION; },"IRQ");
+	$$ = $1;
+}
+;
+
+interruption_immediate: INTERRUPTION_ECHEC
+{
+	$$ = std::make_shared<SVM_Programme::InterruptionInterne>(SVM_Valeur::Interruption::InterruptionInterne::ECHEC);
+}
+| INTERRUPTION_PROCESSEUR
+{
+	$$ = std::make_shared<SVM_Programme::InterruptionInterne>(SVM_Valeur::Interruption::InterruptionInterne::PROCESSEUR);
+}
+| INTERRUPTION_MEMOIRE
+{
+	$$ = std::make_shared<SVM_Programme::InterruptionInterne>(SVM_Valeur::Interruption::InterruptionInterne::MEMOIRE);
+}
+| INTERRUPTION_TERMINAISON
+{
+	$$ = std::make_shared<SVM_Programme::InterruptionInterne>(SVM_Valeur::Interruption::InterruptionInterne::TERMINAISON);
+}
+| INTERRUPTION_NUMERIQUE
+{
+	$$ = std::make_shared<SVM_Programme::InterruptionInterne>(SVM_Valeur::Interruption::InterruptionInterne::NUMERIQUE);
+}
+| INTERRUPTION_PREMIER
+{
+	$$ = std::make_shared<SVM_Programme::InterruptionInterne>(SVM_Valeur::Interruption::InterruptionInterne::PREMIER);
+}
+| INTERRUPTION_SECOND
+{
+	$$ = std::make_shared<SVM_Programme::InterruptionInterne>(SVM_Valeur::Interruption::InterruptionInterne::SECOND);
+}
+| INTERRUPTION_SECURITE
+{
+	$$ = std::make_shared<SVM_Programme::InterruptionInterne>(SVM_Valeur::Interruption::InterruptionInterne::SECURITE);
+}
+| INTERRUPTION_PERIPHERIQUE
+{
+	$$ = std::make_shared<SVM_Programme::InterruptionInterne>(SVM_Valeur::Interruption::InterruptionInterne::PERIPHERIQUE);
+}
+| INTERRUPTION_CLONE
+{
+	$$ = std::make_shared<SVM_Programme::InterruptionInterne>(SVM_Valeur::Interruption::InterruptionInterne::CLONE);
+}
+| INTERRUPTION_TERMINAL
+{
+	$$ = std::make_shared<SVM_Programme::InterruptionInterne>(SVM_Valeur::Interruption::InterruptionInterne::TERMINAL);
+}
+| INTERRUPTION_GENERIC
+{
+	$$ = std::make_shared<SVM_Programme::InterruptionInterne>(SVM_Valeur::Interruption::InterruptionInterne::GENERIQUE);
+}
+| EXCLAMATION point_entree_extension_immediat
+{
+	$$ = std::make_shared<SVM_Programme::InterruptionExterne>($2);
+}
+;
+
+bloc: DEBUT_CROCHET liste_valeurs FIN_CROCHET
+{
+	$$ = $2;
+}
+;
+
+liste_valeurs:
+{
+	$$ = { SVM_Programme::ValeurSP() };
+}
+| valeur
+{
+	$$ = { $1 };
+}
+| liste_valeurs VIRGULE 
+{
+	$$ = $1;
+	$$.push_back(SVM_Programme::ValeurSP());
+}
+| liste_valeurs VIRGULE valeur
+{
+	$$ = $1;
+	$$.push_back($3);
+}
+;
+
+lecture_memoire: LECTURE_MEMOIRE adresse
+{
+	$$ = std::make_shared<SVM_Programme::LectureMemoire>($2);
+}
+;
+
+cible: IDENTIFIANT
+{
+	$$ = std::make_shared<SVM_Programme::CibleStatique>($1);
+}
+| chaine_immediate
+{
+	$$ = std::make_shared<SVM_Programme::CibleDynamique>($1);
+}
+| symbole_immediat
+{
+	$$ = std::make_shared<SVM_Programme::CibleDynamique>($1);
+}
+| lecture_memoire
+{
+	$1->type_voulu([] (const SVM_Memoire::Type& type) -> bool { return type==SVM_Memoire::Type::TypeInterne::CHAINE or type==SVM_Memoire::Type::TypeInterne::SYMBOLE; },"STR or SYM");
+	$$ = std::make_shared<SVM_Programme::CibleDynamique>($1);
+}
+;
+
+condition:
+{
+	$$ = std::make_shared<SVM_Programme::PasDeCondition>();
+}
+| QUAND expression_condition
+{
+	$$ = std::make_shared<SVM_Programme::ConditionNormale>($2);
+}
+| PAS_QUAND expression_condition
+{
+	$$ = std::make_shared<SVM_Programme::ConditionInverse>($2);
+}
+;
+
+expression_condition: booleen VRAI
+{
+	$$ = std::make_shared<SVM_Instruction::ConditionBooleen>($1);
+}
+| chaine LEVE
+{
+	$$ = std::make_shared<SVM_Instruction::ConditionDrapeau>($1);
+}
+| adresse DEFINI
+{
+	$$ = std::make_shared<SVM_Instruction::ConditionAdresseDefinie>($1);
+}
+| adresse INITIALISE
+{
+	$$ = std::make_shared<SVM_Instruction::ConditionAdresseInitialisee>($1);
+}
+| entier DANS pointeur
+{
+	$$ = std::make_shared<SVM_Instruction::ConditionIndiceDansPointeur>($1,$3);
+}
+| adresse DANS pointeur
+{
+	$$ = std::make_shared<SVM_Instruction::ConditionAdresseDansPointeur>($1,$3);
+}
+| adresse EST type_memoire
+{
+	$$ = std::make_shared<SVM_Instruction::ConditionAdresseEstType>($1,$3);
+}
+| cible APPELABLE
+{
+	$$ = std::make_shared<SVM_Instruction::ConditionCibleAppelable>($1);
+}
+| DEBUGUEUR
+{
+	$$ = std::make_shared<SVM_Instruction::ConditionDebugueur>();
+}
+;
+
+liste_types_avec_alias: types_avec_alias
+{
+	$$ = { $1 };
+}
+| liste_types_avec_alias VIRGULE types_avec_alias
+{
+	$$ = $1;
+	$$.push_back($3);
+}
+;
+
+types_avec_alias: types_anonymes
+{
+	$$ = std::make_shared<SVM_Programme::DescriptionBlocAlias>($1);
+}
+| types_anonymes DIVISION IDENTIFIANT
+{
+	$$ = std::make_shared<SVM_Programme::DescriptionBlocAlias>($1,$3);
+}
+;
+
+types_anonymes: type_memoire repetition
+{
+	$$ = std::make_shared<SVM_Programme::DescriptionBlocAtome>($1,$2);
+}
+| DEBUT_PARENTHESE liste_types_anonymes FIN_PARENTHESE repetition
+{
+	$$ = std::make_shared<SVM_Programme::DescriptionBlocCompose>($2,$4);
+}
+;
+
+liste_types_anonymes: types_anonymes
+{
+	$$ = { $1 };
+}
+| liste_types_anonymes VIRGULE types_anonymes 
+{
+	$$ = $1;
+	$$.push_back($3);
+}
+;
+
+repetition:
+{
+	$$ = SVM_Programme::ValeurSP();
+}
+| FOIS entier
+{
+	$$ = $2;
+}
+;
+
+type_memoire:	TYPE_AUTOMATIQUE
+{
+	$$ = std::make_shared<SVM_Programme::TypeInterne>(SVM_Memoire::Type::TypeInterne::AUTOMATIQUE);
+}
+| TYPE_ENTIER
+{
+	$$ = std::make_shared<SVM_Programme::TypeInterne>(SVM_Memoire::Type::TypeInterne::ENTIER);
+}
+| TYPE_CHAINE
+{
+	$$ = std::make_shared<SVM_Programme::TypeInterne>(SVM_Memoire::Type::TypeInterne::CHAINE);
+}
+| TYPE_BOOLEEN
+{
+	$$ = std::make_shared<SVM_Programme::TypeInterne>(SVM_Memoire::Type::TypeInterne::BOOLEEN);
+}
+| TYPE_POINTEUR
+{
+	$$ = std::make_shared<SVM_Programme::TypeInterne>(SVM_Memoire::Type::TypeInterne::POINTEUR);
+}
+| TYPE_BIBLIOTHEQUE
+{
+	$$ = std::make_shared<SVM_Programme::TypeInterne>(SVM_Memoire::Type::TypeInterne::BIBLIOTHEQUE);
+}
+| TYPE_SYMBOLE
+{
+	$$ = std::make_shared<SVM_Programme::TypeInterne>(SVM_Memoire::Type::TypeInterne::SYMBOLE);
+}
+| TYPE_POINT_ENTREE_EXTENSION
+{
+	$$ = std::make_shared<SVM_Programme::TypeInterne>(SVM_Memoire::Type::TypeInterne::POINT_ENTREE_EXTENSION);
+}
+| TYPE_INTERRUPTION
+{
+	$$ = std::make_shared<SVM_Programme::TypeInterne>(SVM_Memoire::Type::TypeInterne::INTERRUPTION);
+}
+| point_entree_extension
+{
+	$$ = std::make_shared<SVM_Programme::TypeExtension>($1);
+}
+;
+
+liste_parametres: 
+{
+	$$ = {};
+}
+| liste_parametres parametre
+{
+	$$ = $1;
+	$$.push_back($2);
+}
+;
+
+parametre: valeur
+{
+	$$=std::make_shared<SVM_Programme::ParametreValeur>($1);
+}
+| marqueur
+{
+	$$=std::make_shared<SVM_Programme::ParametreMarqueur>($1);
+}
+| mot_clef
+{
+	$$=std::make_shared<SVM_Programme::ParametreMotClef>($1);
+}
+;
+
+marqueur: INFERIEUR
+{
+	$$ = SVM_Valeur::ParametreMarqueur::Marqueur::INFERIEUR;
+}
+| SUPERIEUR
+{
+	$$ = SVM_Valeur::ParametreMarqueur::Marqueur::SUPERIEUR;
+}
+| INFERIEUR_INFERIEUR
+{
+	$$ = SVM_Valeur::ParametreMarqueur::Marqueur::INFERIEUR_INFERIEUR;
+}
+| SUPERIEUR_SUPERIEUR
+{
+	$$ = SVM_Valeur::ParametreMarqueur::Marqueur::SUPERIEUR_SUPERIEUR;
+}
+| INFERIEUR_SUPERIEUR
+{
+	$$ = SVM_Valeur::ParametreMarqueur::Marqueur::INFERIEUR_SUPERIEUR;
+}
+| EGAL
+{
+	$$ = SVM_Valeur::ParametreMarqueur::Marqueur::EGAL;
+}
+| INFERIEUR_OU_EGAL
+{
+	$$ = SVM_Valeur::ParametreMarqueur::Marqueur::INFERIEUR_OU_EGAL;
+}
+| SUPERIEUR_OU_EGAL
+{
+	$$ = SVM_Valeur::ParametreMarqueur::Marqueur::SUPERIEUR_OU_EGAL;
+}
+| DEBUT_ACCOLADE
+{
+	$$ = SVM_Valeur::ParametreMarqueur::Marqueur::DEBUT_ACCOLADE;
+}
+| VIRGULE
+{
+	$$ = SVM_Valeur::ParametreMarqueur::Marqueur::VIRGULE;
+}
+| POINT_VIRGULE
+{
+	$$ = SVM_Valeur::ParametreMarqueur::Marqueur::POINT_VIRGULE;
+}
+| FIN_ACCOLADE
+{
+	$$ = SVM_Valeur::ParametreMarqueur::Marqueur::FIN_ACCOLADE;
+}
+;
+
+mot_clef: MOT_CLEF
+{
+	$$ = $1;
+}
+| substitution_mot_clef
+{
+	$$ = $1;
+}
+
+cascade:
+{
+	$$ = false;
+}
+| CASCADE_MC
+{
+	$$ = true;
+}
+;
+
+globale:
+{
+	$$ = false;
+}
+| GLOBAL_MC
+{
+	$$ = true;
+}
+;
+
+operation: AJOUT
+{
+	$$ = true;
+}
+| ENLEVE
+{
+	$$ = false;
+}
+
+type_arret_memoire: LECTURE
+{
+	$$ = SVM_Processeur::Instruction::DebogageArretMemoire::Type::LECTURE;
+}
+| ECRITURE
+{
+	$$ = SVM_Processeur::Instruction::DebogageArretMemoire::Type::ECRITURE;
+}
+| ACCES
+{
+	$$ = SVM_Processeur::Instruction::DebogageArretMemoire::Type::ACCES;
+}
+| SUPPRESSION
+{
+	$$ = SVM_Processeur::Instruction::DebogageArretMemoire::Type::SUPPRESSION;
+}
+
+/* Ici se trouvent des substitutions
+ * permettant d'utiliser des elements semantiques dans des contextes differents
+ * pour etendre les valeurs possibles
+ * Exemple : grace a ces substitutions, cette instruction devient possible:
+ * :library.compile "lib" """<code>""" IRQ -> &lib
+ * au lieu de :
+ * : library.compile "lib """<code>""" IRQ_ -> &lib
+ */
+
+substitution_mot_clef: TYPE_ENTIER
+{
+	$$ = "INT";
+}
+| TYPE_CHAINE
+{
+	$$ = "STR";
+}
+| TYPE_BOOLEEN 
+{
+	$$ = "BLN";
+}
+| TYPE_POINTEUR 
+{
+	$$ = "PTR";
+}
+| TYPE_BIBLIOTHEQUE 
+{
+	$$ = "LIB";
+}
+| TYPE_SYMBOLE 
+{
+	$$ = "SYM";
+}
+| TYPE_POINT_ENTREE_EXTENSION 
+{
+	$$ = "PEP";
+}
+| TYPE_INTERRUPTION 
+{
+	$$ = "IRQ";
+}
+| TYPE_AUTOMATIQUE 
+{
+	$$ = "AUTO";
+}
+| LEVE 
+{
+	$$ = "RAISED";
+}
+| DEFINI 
+{
+	$$ = "DEFINED";
+}
+| INITIALISE 
+{
+	$$ = "INITIALISED";
+}
+| DANS 
+{
+	$$ = "IN";
+}
+| EST 
+{
+	$$ = "IS";
+}
+| APPELABLE 
+{
+	$$ = "CALLABLE";
+}
+;
+
+substitution_instruction: INSTRUCTION_DEBUG
+{
+	$$ = "debug";
+}
+| INSTRUCTION_LIBRARY
+{
+	$$ = "library";
+}
+| INSTRUCTION_LABEL
+{
+	$$ = "label";
+}
+| INSTRUCTION_SYMBOL
+{
+	$$ = "symbol";
+}
+| INSTRUCTION_GOTO
+{
+	$$ = "goto";
+}
+| INSTRUCTION_CALL
+{
+	$$ = "call";
+}
+| INSTRUCTION_RETURN
+{
+	$$ = "return";
+}
+| INSTRUCTION_SHUTDOWN
+{
+	$$ = "shutdown";
+}
+| INSTRUCTION_LOCAL
+{
+	$$ = "local";
+}
+| INSTRUCTION_SHIFT
+{
+	$$ = "shift";
+}
+| INSTRUCTION_FLAG
+{
+	$$ = "flag";
+}
+| INSTRUCTION_INTERRUPTION
+{
+	$$ = "interruption";
+}
+| INSTRUCTION_MEMORY
+{
+	$$ = "memory";
+}
+| QUAND
+{
+	$$ = "when";
+}
+| PAS_QUAND
+{
+	$$ = "unless";
+}
+;
+ 
+
+%%
+
+int machineelementsprogrammeanalyseurerror(YYLTYPE *llocp, void *scanner, const std::string& nom, SVM_Valeur::CodeSP& code, SVM_Valeur::InterruptionSP& erreur, const SVM_Valeur::PositionInstructionSP& position, std::string mesg)
+{
+	std::ostringstream oss;
+	oss << "Unable to parse code " << nom << ": " << mesg; 
+	erreur=std::make_shared<SVM_Valeur::Interruption>(SVM_Valeur::Interruption::InterruptionInterne::ECHEC,oss.str());
+	erreur->position(SVM_Valeur::PositionInstruction(nom,llocp->first_line,llocp->last_line,position));
+	return 1;
+}
+

@@ -1,0 +1,46 @@
+.TH "Simple Virtual Machine - Official plugin mem" 7 "2020-12-10"
+.SH SYNOPSIS
+.B svm_plugin_mem
+\- Simple Virtual Machine official plugin for memory management. 
+.SH DESCRIPTION
+This plugin introduces extra features to manage memory.
+.SH INVOKATION
+This plugin can be added to the Simple Virtual Machine using the directive:
+.nf
+
+PLUGIN "svmmem.so"
+
+.fi
+.SH CONTENT
+.SS INSTRUCTION mem.copy PTR => PTR
+This instruction copies values from a memory zone to another memory zone.
+The target zone has to be defined and types have to be compatibles.
+When the copy fails on a MEMORY interruption, no value is copied.
+.SS INSTRUCTION mem.move PTR => PTR
+This instruction moves values from a memory zone to another memory zone.
+The target zone has to be defined and types have to be compatibles.
+The origin of the move is left defined but not initialised.
+When the move fails on a MEMORY interruption, no value is copied.
+.SS INSTRUCTION mem.share PTR => PTR
+This instruction shares values from a memory zone to another memory zone.
+The target zone has to be defined and types have to be compatibles.
+When the memory sharing fails on a MEMORY interruption, no value is copied.
+Once the sharing is performed, all modifications done on the origin or target addresses are reflected on the corresponding one in the other memory zone.
+.SS INSTRUCTION mem.global PTR
+This instruction changes the scope of the memory zone under the pointer to global.
+A MEMORY interruption is raised if an alias has at least one address in the memory zone.
+.I Use this instruction at your own risk, as it may leak memory when misused.
+.SS INSTRUCTION mem.free PTR
+This instruction removes the memory zone indicated by the pointer.
+A MEMORY interruption is raised if an alias has at least one address in the memory zone.
+.I Use this instruction at your own risk, as it may break the application when misused.
+.SS INSTRUCTION mem.aggregate 'GLOBAL' ? MUTABLE PTR -> PTR
+This instruction reallocates the memory accessible from the input pointer into a single memory zone.
+The instruction returns the new allocated memory, and changes the input pointer to the corresponding memory zone in the result.
+All intra pointers are translated in the new zone.
+If an alias has at least one address in common with the moved memory, a MEMORY interruption is raised.
+.SH SEE ALSO
+.BR svm (1)
+for help on the Simple Virtual Machine.
+.SH AUTHOR
+The Simple Virtual Machine is designed, implemented and maintained by Julien Bruguier <===EMAILCONTACT===>.

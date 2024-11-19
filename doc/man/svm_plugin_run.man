@@ -1,0 +1,195 @@
+.TH "Simple Virtual Machine - Official plugin run" 7 "2020-12-10"
+.SH SYNOPSIS
+.B svm_plugin_run
+\- Simple Virtual Machine official plugin for code execution management. 
+.SH DESCRIPTION
+This plugin introduces extra features to manage code execution.
+.SH INVOKATION
+This plugin can be added to the Simple Virtual Machine using the directive:
+.nf
+
+PLUGIN "svmrun.so"
+
+.fi
+.SH CONTENT
+.SS OPTION run.parallel_limit -l INT
+This option sets the limit of processes managed by the run.parallel scheduler from the start.
+When the value is 0, no limit applies.
+.SS OPTION run.rrpreempt_timer -t INT
+This option sets the execution period of processes managed by the run.rrpreempt scheduler from the start.
+When the value is 0, the option is ignored.
+.SS SYSTEM INSTRUCTION run.coredump [ 'STDOUT' 'STDERR' 'TRACE' ] ? -> STR
+This instruction produces a core dump of the current kernel and returns it in a string.
+When the
+.B STDOUT
+or
+.B STDERR
+keyword is specified, the core dump is also produced on the terminal.
+When the
+.B TRACE
+keyword is specified, the core dump is also produced as an error trace.
+.SS SYSTEM INSTRUCTION run.trace 'LOCATION' ? VALUE +
+This instruction produces an error trace using the values as message.
+When the
+.B LOCATION
+keyword is specified, the message is prefixed by the run.trace instruction location and a colon.
+.SS INSTRUCTION run.interrupt IRQ
+This instruction raises the specified interruption as a software interruption.
+If an interruption handler is defined, the call to this handler is done.
+The kernel is interrupted otherwise.
+.SS INSTRUCTION run.interruption [ 'GLOBAL' 'CASCADE' ] ? [ STR SYM ] : target ?
+This instruction sets or resets an handler for all interruptions available on the machine.
+When the target is not specified, the handlers are reset.
+When the target is a string, a local handler is set.
+When the target is a symbol, a global handler is set.
+If the GLOBAL keyword is specified, a global interruption handler is set.
+If the CASCADE keyword is specified, a cascaded local interruption handler is set.
+.SS INSTRUCTION run.retry INT ? : number_instructions
+This instruction does a return followed by a jump to the specified number of instructions before the next instruction.
+If the number is negative, the instruction is equivalent to a return.
+If the number is higher than the local instruction address, the execution starts from 0.
+When the integer is not specified, 1 is taken by default.
+The instruction can raise a PROCESSOR interruption when the return stack is empty.
+.SS INSTRUCTION run.loop MUTABLE INT : index ( { INT : step } ) ? [ < > ] INT : limit STR : label
+This instruction is an alternative to a loop in one single instruction associated to a 
+.B :label
+one.
+The index is increased or decreased depending on the way represented by the marker 
+.B <
+(increase) or
+.B >
+(decrease) by one (or by the step if specified) until the limit is reached or overflowed.
+If the step is specified, it has to be a positive number even when the index has to be decreased.
+Unless the limit is reached, the execution jumps to the label specified as last parameter.
+.SS WAITING INSTRUCTION run.parallel_call SYM : function PTR : parameters STR : name ( 'PM' = BLN : protected_mode | 'SEQ' = [ 'DEFAULT' PEP ] : sequencer | 'SCHED' = [ 'DEFAULT' PEP ] : scheduler | 'CPU' = INT : max_instructions | 'RAM' = INT : max_memory | 'PARAMS' = [ 'COPY' 'MOVE' 'SHARE' ] 'CASCADE' ? ) *
+This instruction simulates a function call to a symbol with parameters in another process.
+The parameters are shared between the caller and the callee.
+The name of the process is specified by the third parameter.
+Next parameters are options:
+.RS 7
+.IP PM
+When this option is set to TRUE, the kernel included in the process will be in protected mode.
+By default, the option is set to FALSE.
+.IP SEQ
+When this option is set, the sequencer of the process is set to the default one if the DEFAULT keyword is provided, or set to a dedicated sequencer named by the plugin entry point.
+By default, the sequencer of the current process is used.
+.IP SCHED
+When this option is set, the scheduler of the process is set to the default one if the DEFAULT keyword is provided, or set to a dedicated scheduler named by the plugin entry point.
+By default, the scheduler of the current process is used.
+.IP CPU
+When this option is set, a quota on the number of instructions executable in the process is set.
+By default, no quota is set.
+.IP RAM
+When this option is set, a quota on the number of addresses allocated in the process is set.
+By default, no quota is set.
+.IP PARAMS
+When this option is set, the parameters are copied to the new kernel when the value is COPY, or moved when the value is MOVE, or shared when the value is SHARE.
+If the keyword CASCADE is added, all accessible memory from the parameters pointer is copied, moved or shared.
+By default, the share option is set without cascading.
+.RE
+.SS INSTRUCTION run.protected_call SYM : function PTR : parameters ( 'NOIRQ' | 'CPU' = INT : max_instructions | 'RAM' = INT : max_memory | 'PARAMS' = [ 'COPY' 'MOVE' 'SHARE' ] 'CASCADE' ? ) *
+This instruction simulates a function call to a symbol with parameters in another kernel in protected mode.
+The parameters are shared between the caller and the callee.
+Next parameters are options:
+.RS 7
+.IP NOIRQ
+When this option is set, any interruption not catched within the protected kernel is ignored in the current kernel.
+.IP CPU
+When this option is set, a quota on the number of instructions executable in the kernel is set.
+By default, no quota is set.
+.IP RAM
+When this option is set, a quota on the number of addresses allocated in the kernel is set.
+By default, no quota is set.
+.IP PARAMS
+When this option is set, the parameters are copied to the new kernel when the value is COPY, or moved when the value is MOVE, or shared when the value is SHARE.
+If the keyword CASCADE is added, all accessible memory from the parameters pointer is copied, moved or shared.
+By default, the share option is set without cascading.
+.P
+This instruction works properly when the process uses the sequencer run.stack.
+.RE
+.SS WAITING INSTRUCTION run.sleep [ 'HARD' 'SOFT' ] INT : seconds
+This instruction interrupts the program execution for a certain number of seconds.
+A SOFT sleep lets the scheduler execute another process, and an HARD sleep keeps the execution regardless the scheduler.
+.SS INSTRUCTION run.suspend
+This instruction notifies the scheduler of the execution suspension of the current process.
+The execution will restart depending on the scheduler policy.
+.SS INSTRUCTION run.parallel_limit [ 'NONE' INT ]
+This instruction sets a limit to the number of processes the run.parallel scheduler can manage when an integer is provided.
+If the integer is smaller than 1, a FAILURE interruption will be raised.
+This limit is removed when called with the NONE keyword.
+.SS INSTRUCTION run.rrpreempt_timer INT
+This instruction sets the timer in milliseconds of the process run period in the run.rrpreempt scheduler.
+If the integer is smaller than 1, a FAILURE interruption will be raised.
+.SS SCHEDULER run.parallel
+This scheduler is an aggressive executor of processes.
+All processes under this scheduler are running concurrently.
+.SS SCHEDULER run.rrpreempt
+This scheduler is a soft preemptive executor of processes.
+All processes under this scheduler are executed once after the other in a round-robin without any priority.
+.SS SEQUENCER run.stack
+This sequencer allows kernel execution on a stack.
+The last attached kernel will be the next candidate for execution when the next current kernel has to be selected for execution.
+.SH EXAMPLES
+.SS Loop
+.nf
+	:memory INT/index
+	0 -> &index
+:label loop
+	# whatever you want
+	:run.loop @&index { 3 } < 1000 "loop"
+.fi
+.SS Protected call
+.nf
+PLUGIN "svmcom.so"
+PLUGIN "svmrun.so"
+ARGUMENT STR host
+ARGUMENT STR port
+PROCESS "example"
+	CODE "main" INLINE
+		:memory com.device/d, STR/s, LIB/l
+		:com.open com.tcp > @&host @&port -> &d
+		:com.read @&d com.all -> &s
+		:library "unsecure" @&s -> &l
+		:memory AUTO*5/p
+		:run.protected_call $(@&l/) p  RAM=1000
+		:com.message @(p/0) " " @(p/1) " " @(p/2) " " @(p/3) " " @(p/4)
+	END
+	MEMORY host port
+	SEQUENCER run.stack
+END
+.fi
+.SS Parallel call
+.nf
+DESCRIPTION
+A simple hello server.
+END
+PLUGIN "svmcom.so"
+PLUGIN "svmrun.so"
+PLUGIN "svmstr.so"
+ARGUMENT STR host
+ARGUMENT STR port
+PROCESS "hello"
+	CODE "server" INLINE
+		:memory com.device/s, com.device/c
+		:com.open com.tcp < @&host @&port -> &s
+	:label main_loop
+		:com.command @&s CLIENT -> &c
+		:run.parallel_call $"client" c "client" SCHED=run.parallel
+		:goto main_loop
+	:symbol client
+		:memory STR/s
+		:com.read @&P com.line -> &s
+		:str.replace @&s 1 "\\n" => ""
+		:com.write @&P "Hello " @&s "!\\n"
+		:com.command @&P CLOSE >
+		:return
+	END
+	MEMORY host port
+END
+
+.fi
+.SH SEE ALSO
+.BR svm (1)
+for help on the Simple Virtual Machine.
+.SH AUTHOR
+The Simple Virtual Machine is designed, implemented and maintained by Julien Bruguier <===EMAILCONTACT===>.

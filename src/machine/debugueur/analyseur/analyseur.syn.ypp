@@ -1,0 +1,199 @@
+/*
+ * Simple Virtual Machine - A versatile and robust architecture to
+ * easily write applications.
+ * Copyright (C) 2021  Julien BRUGUIER
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+%{
+#include <src/global/global.h>
+#define YYDEBUG 0
+#include <src/machine/debugueur/analyseur/includes.h>
+
+extern int machinedebugueuranalyseurerror(YYLTYPE *llocp, void *scanner, SVM::Machine::Debugueur::JSON_Interne::ValeurSP& valeur, std::string mesg);
+extern int machinedebugueuranalyseurlex(YYSTYPE *lvalp, YYLTYPE *llocp, void *scanner);
+extern int machinedebugueuranalyseurlex_init(void *scanner);
+extern int machinedebugueuranalyseurlex_destroy(void *scanner);
+
+%}
+
+%locations
+%define api.pure full
+%define api.value.type { struct ValeurJSON }
+%param { void *scanner }
+
+%parse-param { SVM::Machine::Debugueur::JSON_Interne::ValeurSP& valeur }
+
+%initial-action { 
+#if YYDEBUG==1
+	machinedebugueuranalyseurdebug=1;
+#endif
+}
+%code requires
+{
+
+struct ValeurJSON
+{
+	SVM::Machine::Debugueur::JSON_Interne::Entier::Type entier;
+	SVM::Machine::Debugueur::JSON_Interne::Chaine::Type chaine;
+	SVM::Machine::Debugueur::JSON_Interne::Objet::Membres membres_objet;
+	std::pair<std::string,SVM::Machine::Debugueur::JSON_Interne::ValeurSP> membre_objet;
+	SVM::Machine::Debugueur::JSON_Interne::Tableau::Membres membres_tableau;
+	SVM::Machine::Debugueur::JSON_Interne::EntierSP valeur_entier;
+	SVM::Machine::Debugueur::JSON_Interne::ChaineSP valeur_chaine;
+	SVM::Machine::Debugueur::JSON_Interne::BooleenSP valeur_booleen;
+	SVM::Machine::Debugueur::JSON_Interne::ObjetSP valeur_objet;
+	SVM::Machine::Debugueur::JSON_Interne::TableauSP valeur_tableau;
+	SVM::Machine::Debugueur::JSON_Interne::ValeurSP valeur;
+};
+
+#   define YYCOPY(Dst, Src, Count)              \
+      do                                        \
+        {                                       \
+          YYSIZE_T yyi;                         \
+          for (yyi = 0; yyi < (Count); yyi++)   \
+            (Dst)[yyi] = (Src)[yyi];            \
+        }                                       \
+      while (0)
+
+
+}
+
+/*
+%destructor { } <*>
+*/
+
+%token _INVALIDE_
+%token<chaine> CHAINE
+%token<entier> ENTIER
+%token VRAI FAUX DEUX_POINTS VIRGULE ACCOLADE_OUVRANTE ACCOLADE_FERMANTE CROCHET_OUVRANT CROCHET_FERMANT
+
+%type<valeur> valeur
+%type<valeur_entier> entier
+%type<valeur_chaine> chaine
+%type<valeur_booleen> booleen
+%type<valeur_objet> objet
+%type<valeur_tableau> tableau
+%type<membres_objet> membres_objet
+%type<membre_objet> membre_objet
+%type<membres_tableau> membres_tableau
+
+%start valeur_racine
+%%
+
+valeur_racine: valeur
+{
+	valeur = $1;
+}
+;
+
+valeur: entier
+{
+	$$ = $1;
+}
+|	chaine
+{
+	$$ = $1;
+}
+|	booleen
+{
+	$$ = $1;
+}
+|	objet
+{
+	$$ = $1;
+}
+|	tableau
+{
+	$$ = $1;
+}
+;
+
+entier: ENTIER
+{
+	$$ = SVM::Machine::Debugueur::JSON::entier($1);
+}
+;
+
+chaine: CHAINE
+{
+	$$ = SVM::Machine::Debugueur::JSON::chaine($1);
+}
+;
+
+booleen: VRAI
+{
+	$$ = SVM::Machine::Debugueur::JSON::booleen(true);
+}
+|	FAUX
+{
+	$$ = SVM::Machine::Debugueur::JSON::booleen(false);
+}
+;
+
+objet: ACCOLADE_OUVRANTE membres_objet ACCOLADE_FERMANTE
+{
+	$$ = SVM::Machine::Debugueur::JSON::objet($2);
+}
+|	ACCOLADE_OUVRANTE ACCOLADE_FERMANTE
+{
+	$$ = SVM::Machine::Debugueur::JSON::objet(SVM::Machine::Debugueur::JSON_Interne::Objet::Membres());
+}
+;
+
+membres_objet: membre_objet
+{
+	$$ = SVM::Machine::Debugueur::JSON_Interne::Objet::Membres();
+	$$.insert($1);
+}
+|	membres_objet VIRGULE membre_objet
+{
+	$$ = $1;
+	$$.insert($3);
+}
+;
+
+membre_objet: CHAINE DEUX_POINTS valeur
+{
+	$$ = std::make_pair($1,$3);
+}
+;
+
+tableau: CROCHET_OUVRANT membres_tableau CROCHET_FERMANT
+{
+	$$ = SVM::Machine::Debugueur::JSON::tableau($2);
+}
+|	CROCHET_OUVRANT CROCHET_FERMANT
+{
+	$$ = SVM::Machine::Debugueur::JSON::tableau(SVM::Machine::Debugueur::JSON_Interne::Tableau::Membres());
+}
+;
+
+membres_tableau: valeur
+{
+	$$ = SVM::Machine::Debugueur::JSON_Interne::Tableau::Membres();
+	$$.push_back($1);
+}
+|	membres_tableau VIRGULE valeur
+{
+	$$ = $1;
+	$$.push_back($3);
+}
+
+%%
+int machinedebugueuranalyseurerror(YYLTYPE *llocp, void *scanner, SVM::Machine::Debugueur::JSON_Interne::ValeurSP& valeur, std::string mesg)
+{
+	return 1;
+}

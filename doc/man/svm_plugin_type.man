@@ -1,0 +1,46 @@
+.TH "Simple Virtual Machine - Official plugin type" 7 "2020-12-10"
+.SH SYNOPSIS
+.B svm_plugin_type
+\- Simple Virtual Machine official plugin for type management. 
+.SH DESCRIPTION
+This plugin enhances the value type handling, by allowing dynamic type creation and memory allocation.
+.SH INVOKATION
+This plugin can be added to the Simple Virtual Machine using the directive:
+.nf
+
+PLUGIN "svmtype.so"
+
+.fi
+.SH CONTENT
+.SS TYPE type.type
+This type contains a value type.
+.P
+This type can be copied, created by a constant and compared with a weak total order.
+.SS INSTRUCTION type.new ( [ 'AUTO' 'INT' 'STR' 'BLN' 'PTR' 'LIB' 'SYM' 'PEP' 'IRQ' ] | PEP ) -> type.type
+This instruction creates a type type: An internal type type when a keyword is given, an external type type when a PEP is given.
+.P
+This instruction raises a MEMORY interruption when the given PEP is not a defined type.
+.SS INSTRUCTION type.cmp type.type [ = <> < > <= => ] type.type -> BLN
+This instruction compares two types.
+.P
+The relation is a weak total order.
+.SS INSTRUCTION type.extract PTR -> PTR
+This instruction gets the types in the memory indicated by the pointer, and returns a pointer on an array of type.type with the types.
+.SS INSTRUCTION type.memory 'GLOBAL' ? ( ( type.type INT ? ) + | PTR ) -> PTR
+This instruction allocates a memory zone with either a list of type types with an optional repetition, or from a pointer.
+When a pointer is specified, the instruction reads the memory at the pointer location for type.type values, and allocates the memory accordingly.
+.P
+When the GLOBAL keyword is given, the memory is set as global.
+.SS FUNCTION type.new VARIABLE -> type.type
+This function creates a type type from an SVM_Type variable.
+.SS FUNCTION type.get type.type -> VARIABLE
+This function extracts the SVM_Type variable from a type type.
+.SS FUNCTION type.cmp type.type [ = <> < > <= => ] type.type -> BLN
+This function compares two types.
+.P
+The relation is a weak total order.
+.SH SEE ALSO
+.BR svm (1)
+for help on the Simple Virtual Machine.
+.SH AUTHOR
+The Simple Virtual Machine is designed, implemented and maintained by Julien Bruguier <===EMAILCONTACT===>.

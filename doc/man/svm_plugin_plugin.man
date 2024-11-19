@@ -1,0 +1,26 @@
+.TH "Simple Virtual Machine - Official plugin plugin" 7 "2020-12-10"
+.SH SYNOPSIS
+.B svm_plugin_plugin
+\- Simple Virtual Machine official plugin for plugin management. 
+.SH DESCRIPTION
+This plugin introduces extra features to manage plugins.
+.SH INVOKATION
+This plugin can be added to the Simple Virtual Machine using the directive:
+.nf
+
+PLUGIN "svmplugin.so"
+
+.fi
+.SH CONTENT
+.SS SYSTEM INSTRUCTION plugin.dump [ 'STDOUT' 'STDERR' ] ? -> STR
+This instruction returns in a string a list of objects defined in plugins loaded into the virtual machine.
+When
+.B STDOUT
+or
+.B STDERR
+is specified, the string is also printed on the terminal.
+.SH SEE ALSO
+.BR svm (1)
+for help on the Simple Virtual Machine.
+.SH AUTHOR
+The Simple Virtual Machine is designed, implemented and maintained by Julien Bruguier <===EMAILCONTACT===>.

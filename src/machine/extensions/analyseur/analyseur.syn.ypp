@@ -1,0 +1,628 @@
+/*
+ * Simple Virtual Machine - A versatile and robust architecture to
+ * easily write applications.
+ * Copyright (C) 2021  Julien BRUGUIER
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+%{
+#include <src/global/global.h>
+#define YYDEBUG 0
+#include <src/machine/extensions/analyseur/includes.h>
+
+namespace SVM_Extension = SVM::Machine::Extension;
+
+extern int machineextensionsanalyseurerror(YYLTYPE *llocp, void *scanner, const std::string& nom, SVM_Extension::DescriptionSP& description, std::string mesg);
+extern int machineextensionsanalyseurlex(YYSTYPE *lvalp, YYLTYPE *llocp, void *scanner);
+extern int machineextensionsanalyseurlex_init(void *scanner);
+extern int machineextensionsanalyseurlex_destroy(void *scanner);
+
+%}
+
+%locations
+%define api.pure full
+%define api.value.type { struct ValeurExtension }
+%param { void *scanner }
+
+%parse-param { const std::string& nom }
+%parse-param { SVM_Extension::DescriptionSP& description }
+
+%initial-action { 
+#if YYDEBUG==1
+	machineextensionsanalyseurdebug=1;
+#endif
+}
+%code requires
+{
+
+struct ValeurExtension
+{
+	ValeurExtension()
+	:entier(0) {}
+	size_t entier;
+	std::string chaine;
+	std::vector<bool> booleens;
+	SVM_Extension::ObjetSP objet;
+	std::vector<SVM_Extension::ObjetSP> liste_objets;
+	SVM_Valeur::PointEntreeExtension point_entree_extension;
+	SVM_Extension::RegexParametresSP regex_parametres;
+	SVM_Extension::RegexParametresSequenceSP regex_parametres_sequence;
+	SVM_Extension::RegexParametresAlternativeSimpleSP regex_parametres_alternative_simple;
+	SVM_Extension::RegexParametresAlternativeSP regex_parametres_alternative;
+	SVM_Extension::RegexParametresElementSP regex_parametres_element;
+	SVM_Memoire::Type::TypeInterne type_memoire = SVM_Memoire::Type::TypeInterne::AUTOMATIQUE;
+};
+
+#   define YYCOPY(Dst, Src, Count)              \
+      do                                        \
+        {                                       \
+          YYSIZE_T yyi;                         \
+          for (yyi = 0; yyi < (Count); yyi++)   \
+            (Dst)[yyi] = (Src)[yyi];            \
+        }                                       \
+      while (0)
+}
+
+/*
+%destructor { } <*>
+*/
+
+%token _INVALIDE_
+%token FIN_LIGNE
+%token<entier> ENTIER
+%token<chaine> IDENTIFIANT MOT_CLEF VALEUR_OPTION
+%token PLUGIN USE DEFINE
+%token TYPE INSTRUCTION STRUCT FUNCTION INTERRUPTION SCHEDULER SEQUENCER OPTION ARGUMENT ARGUMENTS
+%token SYSTEM WAITING OVERRIDE RETURN
+%token POINT
+%token MUTABLE VALUE INT STR BLN PTR LIB SYM PEP IRQ AUTO
+%token MARKER INFERIEUR SUPERIEUR INFERIEUR_INFERIEUR SUPERIEUR_SUPERIEUR INFERIEUR_SUPERIEUR DEBUT_ACCOLADE FIN_ACCOLADE VIRGULE POINT_VIRGULE EGAL INFERIEUR_OU_EGAL SUPERIEUR_OU_EGAL
+%token KEYWORD
+%token VARIABLE
+%token STRUCTURE
+%token DEBUT_CROCHET DEBUT_PARENTHESE FIN_CROCHET FIN_PARENTHESE PLUS FOIS POINT_INTERROGATION ALTERNATIVE
+%token DEUX_POINTS
+
+%type<liste_objets> utilise declare liste_objets
+%type<objet> objet type instruction structure fonction interruption ordonnnanceur sequenceur option argument arguments
+%type<point_entree_extension> point_entree_extension
+%type<booleens> drapeaux_instructions
+%type<chaine> identifiant
+%type<regex_parametres_sequence> regex_parametres regex_alternative_simple
+%type<regex_parametres> regex_parametres_element retour regex_retour regex_retour_element 
+%type<regex_parametres_alternative_simple> regex_parametres_element_liste_simple regex_retour_element_liste_simple
+%type<regex_parametres_alternative> regex_alternative 
+%type<regex_parametres_element> regex_parametres_element_simple regex_retour_element_simple valeur marqueur mot_clef variable
+%type<type_memoire> type_option type_argument
+
+
+%start extension
+
+%%
+
+extension: PLUGIN IDENTIFIANT FIN_LIGNE utilise declare
+{
+	description->_nom = $2;
+	description->_utilise = $4;
+	description->_declare = $5;
+}
+;
+
+utilise:
+{
+	$$ = std::vector<SVM_Extension::ObjetSP>();
+}
+| USE FIN_LIGNE liste_objets
+{
+	$$ = $3;
+}
+;
+
+declare: DEFINE FIN_LIGNE liste_objets
+{
+	$$ = $3;
+}
+;
+
+liste_objets: objet
+{
+	$$ = std::vector<SVM_Extension::ObjetSP>();
+	$$.push_back($1);
+}
+| liste_objets objet
+{
+	$$ = std::move($1);
+	$$.push_back($2);
+}
+;
+
+objet: type FIN_LIGNE
+{
+	$$ = $1;
+}
+| instruction FIN_LIGNE
+{
+	$$ = $1;
+}
+| structure FIN_LIGNE
+{
+	$$ = $1;
+}
+| fonction FIN_LIGNE
+{
+	$$ = $1;
+}
+| interruption FIN_LIGNE
+{
+	$$ = $1;
+}
+| ordonnnanceur FIN_LIGNE
+{
+	$$ = $1;
+}
+| sequenceur FIN_LIGNE
+{
+	$$ = $1;
+}
+| option FIN_LIGNE
+{
+	$$ = $1;
+}
+| argument FIN_LIGNE
+{
+	$$ = $1;
+}
+| arguments FIN_LIGNE
+{
+	$$ = $1;
+}
+;
+
+type: TYPE point_entree_extension
+{
+	$$ = std::make_shared<SVM_Extension::Type>(@$.first_line,$2);
+}
+;
+
+instruction: drapeaux_instructions INSTRUCTION point_entree_extension regex_parametres retour
+{
+	$$ = std::make_shared<SVM_Extension::Instruction>(@$.first_line,$3,$4,$5,$1[0],$1[1],$1[2]);
+}
+;
+
+structure: STRUCT point_entree_extension
+{
+	$$ = std::make_shared<SVM_Extension::Structure>(@$.first_line,$2);
+}
+;
+
+fonction: FUNCTION point_entree_extension regex_parametres retour
+{
+	$$ = std::make_shared<SVM_Extension::Fonction>(@$.first_line,$2,$3,$4);
+}
+;
+
+interruption: INTERRUPTION point_entree_extension
+{
+	$$ = std::make_shared<SVM_Extension::Interruption>(@$.first_line,$2);
+}
+;
+
+ordonnnanceur: SCHEDULER point_entree_extension
+{
+	$$ = std::make_shared<SVM_Extension::Ordonnanceur>(@$.first_line,$2);
+}
+;
+
+sequenceur: SEQUENCER point_entree_extension
+{
+	$$ = std::make_shared<SVM_Extension::Sequenceur>(@$.first_line,$2);
+}
+;
+
+option: OPTION point_entree_extension VALEUR_OPTION type_option
+{
+	$$ = std::make_shared<SVM_Extension::Option>(@$.first_line,$2,$3,$4);
+}
+;
+
+argument: ARGUMENT point_entree_extension type_argument
+{
+	$$ = std::make_shared<SVM_Extension::Argument>(@$.first_line,$2,description->_indice_argument++,$3);
+}
+;
+
+arguments: ARGUMENTS point_entree_extension
+{
+	$$ = std::make_shared<SVM_Extension::Arguments>(@$.first_line,$2);
+}
+;
+
+type_option: BLN
+{
+	$$ = SVM_Memoire::Type::TypeInterne::BOOLEEN;
+}
+|	type_argument
+{
+	$$ = $1;
+}
+;
+
+type_argument: INT
+{
+	$$ = SVM_Memoire::Type::TypeInterne::ENTIER;
+}
+|	STR
+{
+	$$ = SVM_Memoire::Type::TypeInterne::CHAINE;
+}
+;
+
+drapeaux_instructions:
+{
+	$$ = { false, false, false };
+}
+|	drapeaux_instructions SYSTEM
+{
+	$$ = $1;
+	$$[0] = true;
+}
+|	drapeaux_instructions WAITING
+{
+	$$ = $1;
+	$$[1] = true;
+}
+|	drapeaux_instructions OVERRIDE
+{
+	$$ = $1;
+	$$[2] = true;
+}
+;
+
+retour:
+{
+	$$ = SVM_Extension::RegexParametresSP();
+}
+| RETURN regex_retour
+{
+	$$ = $2;
+}
+;
+
+regex_parametres: 
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresSequence>();
+}
+| regex_parametres regex_parametres_element
+{
+	$$ = $1;
+	$$->_elements.push_back($2);
+}
+;
+
+regex_parametres_element: regex_parametres_element_simple identifiant
+{
+	$$ = $1;
+	$$->_nom = $2;
+}
+| DEBUT_PARENTHESE regex_alternative FIN_PARENTHESE identifiant
+{
+	$$ = $2;
+	$$->_nom = $4;
+}
+| DEBUT_CROCHET regex_parametres_element_liste_simple FIN_CROCHET identifiant
+{
+	$$ = $2;
+	$$->_nom = $4;
+}
+/*
+| DEBUT_CROCHET CHAPEAU regex_parametres_element_liste_simple FIN_CROCHET
+{
+	$3->_inverse = true;
+	$$ = $3;
+}
+*/
+| regex_parametres_element POINT_INTERROGATION identifiant
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresOptionnel>($1);
+	$$->_nom = $3;
+}
+| regex_parametres_element FOIS identifiant
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresRepetitionOptionnel>($1);
+	$$->_nom = $3;
+}
+| regex_parametres_element PLUS identifiant
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresRepetitionObligatoire>($1);
+	$$->_nom = $3;
+}
+| regex_parametres_element ENTIER identifiant
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresRepetitionFixe>($1,$2);
+	$$->_nom = $3;
+}
+;
+
+regex_parametres_element_liste_simple: regex_parametres_element_simple
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresAlternativeSimple>();
+	$$->_elements.push_back($1);
+}
+| regex_parametres_element_liste_simple regex_parametres_element_simple
+{
+	$$ = $1;
+	$$->_elements.push_back($2);
+}
+;
+
+regex_alternative: regex_alternative_simple
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresAlternative>();
+	$$->_alternatives.push_back($1);
+}
+| regex_alternative ALTERNATIVE regex_alternative_simple
+{
+	$$ = $1;
+	$$->_alternatives.push_back($3);
+}
+;
+
+regex_alternative_simple:
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresSequence>();
+}
+| regex_alternative_simple regex_parametres_element
+{
+	$$ = $1;
+	$$->_elements.push_back($2);
+}
+;
+
+regex_parametres_element_simple: POINT
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresJokerTotal>();
+}
+| valeur
+{
+	$$ = $1;
+}
+| MUTABLE valeur
+{
+	$$ = $2;
+	$$->_modifiable=true;
+}
+| marqueur
+{
+	$$ = $1;
+}
+| mot_clef
+{
+	$$ = $1;
+}
+| variable
+{
+	$$ = $1;
+}
+;
+
+regex_retour: regex_retour_element identifiant
+{
+	$$ = $1;
+	$$->_nom = $2;
+}
+| variable identifiant
+{
+	$$ = $1;
+	$$->_nom = $2;
+}
+;
+
+regex_retour_element: regex_retour_element_simple
+{
+	$$ = $1;
+}
+| DEBUT_CROCHET regex_retour_element_liste_simple FIN_CROCHET
+{
+	$$ = $2;
+}
+/*
+| DEBUT_CROCHET CHAPEAU regex_retour_element_liste_simple FIN_CROCHET
+{
+	$3->_inverse = true;
+	$$ = $3;
+
+}
+*/
+| regex_retour_element POINT_INTERROGATION
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresOptionnel>($1);
+}
+;
+
+regex_retour_element_liste_simple: regex_retour_element_simple
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresAlternativeSimple>();
+	$$->_elements.push_back($1);
+}
+| regex_retour_element_liste_simple regex_retour_element_simple
+{
+	$$ = $1;
+	$$->_elements.push_back($2);
+}
+;
+
+regex_retour_element_simple: POINT
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresJokerTotal>();
+}
+| valeur
+{
+	$$ = $1;
+}
+;
+
+valeur: VALUE
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresJokerPartielValeur>();
+}
+| STRUCT
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresJokerPartielStructure>();
+}
+| INT 
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresValeur>(SVM_Memoire::Type(SVM_Memoire::Type::TypeInterne::ENTIER));
+}
+| STR 
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresValeur>(SVM_Memoire::Type(SVM_Memoire::Type::TypeInterne::CHAINE));
+}
+| BLN 
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresValeur>(SVM_Memoire::Type(SVM_Memoire::Type::TypeInterne::BOOLEEN));
+}
+| PTR 
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresValeur>(SVM_Memoire::Type(SVM_Memoire::Type::TypeInterne::POINTEUR));
+}
+| LIB 
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresValeur>(SVM_Memoire::Type(SVM_Memoire::Type::TypeInterne::BIBLIOTHEQUE));
+}
+| SYM 
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresValeur>(SVM_Memoire::Type(SVM_Memoire::Type::TypeInterne::SYMBOLE));
+}
+| PEP 
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresValeur>(SVM_Memoire::Type(SVM_Memoire::Type::TypeInterne::POINT_ENTREE_EXTENSION));
+}
+| IRQ 
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresValeur>(SVM_Memoire::Type(SVM_Memoire::Type::TypeInterne::INTERRUPTION));
+}
+| AUTO
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresValeur>(SVM_Memoire::Type(SVM_Memoire::Type::TypeInterne::AUTOMATIQUE));
+}
+| point_entree_extension
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresValeur>(SVM_Memoire::Type($1));
+}
+| STRUCTURE point_entree_extension
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresStructure>(SVM_Memoire::Type($2));
+}
+;
+
+point_entree_extension: IDENTIFIANT POINT IDENTIFIANT
+{
+	$$ = SVM_Valeur::PointEntreeExtension($1,$3);
+}
+;
+
+marqueur: MARKER
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresJokerPartielMarqueur>();
+}
+| INFERIEUR 
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresMarqueur>(SVM_Valeur::ParametreMarqueur::Marqueur::INFERIEUR);
+}
+| INFERIEUR_INFERIEUR
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresMarqueur>(SVM_Valeur::ParametreMarqueur::Marqueur::INFERIEUR_INFERIEUR);
+}
+| INFERIEUR_SUPERIEUR
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresMarqueur>(SVM_Valeur::ParametreMarqueur::Marqueur::INFERIEUR_SUPERIEUR);
+}
+| SUPERIEUR
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresMarqueur>(SVM_Valeur::ParametreMarqueur::Marqueur::SUPERIEUR);
+}
+| SUPERIEUR_SUPERIEUR
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresMarqueur>(SVM_Valeur::ParametreMarqueur::Marqueur::SUPERIEUR_SUPERIEUR);
+}
+| DEBUT_ACCOLADE
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresMarqueur>(SVM_Valeur::ParametreMarqueur::Marqueur::DEBUT_ACCOLADE);
+}
+| FIN_ACCOLADE
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresMarqueur>(SVM_Valeur::ParametreMarqueur::Marqueur::FIN_ACCOLADE);
+}
+| VIRGULE
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresMarqueur>(SVM_Valeur::ParametreMarqueur::Marqueur::VIRGULE);
+}
+| POINT_VIRGULE
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresMarqueur>(SVM_Valeur::ParametreMarqueur::Marqueur::POINT_VIRGULE);
+}
+| EGAL
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresMarqueur>(SVM_Valeur::ParametreMarqueur::Marqueur::EGAL);
+}
+| INFERIEUR_OU_EGAL
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresMarqueur>(SVM_Valeur::ParametreMarqueur::Marqueur::INFERIEUR_OU_EGAL);
+}
+| SUPERIEUR_OU_EGAL
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresMarqueur>(SVM_Valeur::ParametreMarqueur::Marqueur::SUPERIEUR_OU_EGAL);
+}
+;
+
+mot_clef: KEYWORD
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresJokerPartielMotClef>();
+}
+| MOT_CLEF
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresMotClef>($1);
+}
+;
+
+variable: VARIABLE
+{
+	$$ = std::make_shared<SVM_Extension::RegexParametresJokerPartielVariable>();
+}
+;
+
+identifiant:
+{
+	$$ = std::string();
+}
+| DEUX_POINTS IDENTIFIANT
+{
+	$$ = $2;
+}
+;
+
+%%
+
+int machineextensionsanalyseurerror(YYLTYPE *llocp, void *scanner, const std::string& nom, SVM_Extension::DescriptionSP& description, std::string mesg)
+{
+	std::ostringstream oss;
+	oss << "Unable to parse configuration string of library " << nom << ": " << mesg; 
+	description->_message = oss.str();
+	description->_ligne = llocp->first_line;
+	description->_erreur = true; 
+	return 1;
+}
+

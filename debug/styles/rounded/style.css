@@ -1,0 +1,538 @@
+/*
+ * Simple Virtual Machine - A versatile and robust architecture to
+ * easily write applications.
+ * Copyright (C) 2021  Julien BRUGUIER
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+html, body
+{
+	margin:0;
+	padding:0;
+	color: var(--main);
+}
+
+div.main_bar
+{
+	position: fixed;
+	top:0;
+	left:0;
+	height:30px;
+	width:100%;
+	background-color: var(--mainbarbg);
+	color: var(--mainbarfg);
+	padding:5px;
+	margin:0;
+	box-shadow: 0px 3px 1px var(--mainbarshadow);
+}
+
+div.main_bar div.menu_button
+{
+	display:inline;
+	border: solid 1px;
+	background-color: var(--menubg);
+	color: var(--menufg);
+	margin-right: 5px;
+	cursor: pointer;
+	border-radius: 5px;
+	padding: 3px;
+	top: 4px;
+	position: relative;
+}
+
+div.main_bar div.menu_button::before
+{
+	content: url('/styles/rounded/menu.png');
+}
+
+div.main_bar div.menu_button:hover
+{
+	color: var(--selectedmenufg);
+	background-color: var(--selectedmenubg);
+}
+
+div.main_bar div.application
+{
+	display: inline;
+	font-weight: bold;
+	cursor: default;
+	position: relative;
+	top: 5px;
+	left: 30px;
+}
+
+div.desktop
+{
+	position:fixed;
+	padding:0;
+	margin:0;
+	top:40px;
+	left:0;
+	width:100%;
+	height:calc(100% - 40px);
+	height:-moz-calc(100% - 40px);
+	height:-webkit-calc(100% - 40px);
+	height:-o-calc(100% - 40px);
+	background-color: var(--desktopbg);
+	background-image: url('/styles/rounded/desktop.png');
+}
+
+div.window
+{
+	border: solid 1px;
+	background-color: var(--windowbg);
+	border-radius: 7px;
+	box-shadow: 3px 3px 1px var(--windowshadow);
+}
+
+div.window div.window_box
+{
+	margin: 3px;
+	background-color: var(--windowboxbg);
+	border-radius: 5px;
+}
+
+div.window div.window_title_bar.focus
+{
+	color: var(--windowbarfocusfg);
+	background-color: var(--windowbarfocusbg);
+	margin-bottom: 0px;
+	padding-bottom: 3px;
+	border-radius: 5px 5px 0px 0px;
+	border-bottom: solid 1px var(--windowbarborder);
+}
+
+div.window div.window_title_bar
+{
+	color: var(--windowbarfg);
+	background-color: var(--windowbarbg);
+	margin-bottom: 0px;
+	padding-bottom: 3px;
+	cursor: default;
+	border-radius: 5px 5px 0px 0px;
+	border-bottom: solid 1px var(--windowbarborder);
+}
+
+div.windows_list_window
+{
+	border: solid 1px;
+	margin: 1px;
+}
+
+div.window_title
+{
+	overflow: hidden;
+	height: 20px;
+	margin-left: 3px;
+	margin-top: 3px;
+}
+
+div.windows_list_window.window_title_bar
+{
+	height: 20px !important;
+	border-radius: 3px !important;
+	padding: 3px !important;
+	border-bottom: solid 1px black !important;
+}
+
+div.windows_list_window.window_title_bar div.window_title_bar
+{
+	border:0 !important;
+}
+
+div.windows_list_window.window_title_bar div.window_buttons
+{
+	margin-top: 0 !important;
+}
+
+div.window_title_bar div.window_buttons
+{
+	float:right;
+	margin-left: 5px;
+	margin-top: 3px;
+}
+
+div.window_title_bar div.window_button
+{
+	border: 0;
+	background-color: transparent;
+	padding-left: 1px;
+	padding-right: 1px;
+	margin-right: 5px;
+	position: static;
+	top:1px;
+	min-width: 2em;
+	box-shadow: none;
+}
+
+div.window_title_bar div.window_buttons_alarm::after
+{
+	content: url('/styles/rounded/window-alarm.png');
+}
+
+div.window_title_bar div.window_button.window_buttons_alarm:hover::after
+{
+	content: url('/styles/rounded/window-alarm-selected.png');
+}
+
+div.window_title_bar div.window_buttons_alarm.active::after
+{
+	content: url('/styles/rounded/window-alarm-active.png');
+}
+
+div.window_title_bar div.window_button.window_buttons_alarm.active:hover::after
+{
+	content: url('/styles/rounded/window-alarm-selected-active.png');
+}
+
+div.window_title_bar div.window_buttons_help::after
+{
+	content: url('/styles/rounded/window-help.png');
+}
+
+div.window_title_bar div.window_button.window_buttons_help:hover::after
+{
+	content: url('/styles/rounded/window-help-selected.png');
+}
+
+div.window_title_bar div.window_buttons_hide::after
+{
+	content: url('/styles/rounded/window-hide.png');
+}
+
+div.window_title_bar div.window_button.window_buttons_hide:hover::after
+{
+	content: url('/styles/rounded/window-hide-selected.png');
+}
+
+div.window_title_bar div.window_buttons_close::after
+{
+	content: url('/styles/rounded/window-close.png');
+}
+
+div.window_title_bar div.window_button.window_buttons_close:hover::after
+{
+	content: url('/styles/rounded/window-close-selected.png');
+}
+
+div.window.help div.window_content
+{
+	color: var(--helpfg);
+	background-color: var(--helpbg);
+	padding:5px;
+}
+
+div.help_content
+{
+	overflow: auto;
+	width:300px;
+}
+
+div.help_large_content
+{
+	overflow: auto;
+	width:500px;
+}
+
+div.window div.window_content
+{
+	padding:1px;
+	border-radius: 0px 0px 5px 5px;
+}
+
+div.button
+{
+	border: solid 1px;
+	margin: 2px;
+	padding: 1px;
+	box-shadow: 1px 1px;
+	color: var(--textbuttonfg);
+	background-color: var(--textbuttonbg);
+	border-radius: 2px;
+}
+
+div.button:hover
+{
+	color: var(--selectedtextbuttonfg);
+	background-color: var(--selectedtextbuttonbg);
+	cursor: pointer;
+	box-shadow: none;
+}
+
+div.button.line
+{
+	display: inline-block;
+}
+
+td.button:hover
+{
+	cursor: pointer;
+}
+
+div.button.processor_run, div.button.processor_pause, div.button.processor_instruction, div.button.processor_function, div.button.processor_return, div.button.delete, div.button.open, div.button.cannot_open, div.button.follow
+{
+	border: 0;
+	box-shadow: none;
+	background-color: transparent;
+}
+
+div.processor_pause::after
+{
+	content: url('/styles/rounded/processor-pause.png');
+}
+
+div.processor_instruction::after
+{
+	content: url('/styles/rounded/processor-instruction.png');
+}
+
+div.processor_function::after
+{
+	content: url('/styles/rounded/processor-function.png');
+}
+
+div.processor_run::after
+{
+	content: url('/styles/rounded/processor-run.png');
+}
+
+div.processor_return::after
+{
+	content: url('/styles/rounded/processor-return.png');
+}
+
+table.code
+{
+	margin: 2px;
+	border-spacing: 0px;
+}
+
+pre.extra
+{
+	padding: 0px;
+	margin: 0px;
+	margin-left: 2px;
+}
+
+tr.code
+{
+	padding: 0px;
+	margin: 0px;
+	vertical-align: bottom;
+}
+
+tr.code td
+{
+	padding: 0px;
+	margin: 0px;
+}
+
+td.code
+{
+	color: var(--codefg);
+	background-color: var(--codebg);
+}
+
+td.break
+{
+	min-width: 2em;
+	width: 2em;
+	font-size: 1.2ex;
+	text-align: center;
+	cursor: pointer;
+	border-left: solid 1px;
+	border-color: var(--codeseparator);
+}
+
+tr.code:first-child td.break
+{
+	border-top: solid 1px;
+	border-color: var(--codeseparator);
+}
+
+tr.code:last-child td.break
+{
+	border-bottom: solid 1px;
+	border-color: var(--codeseparator);
+}
+
+td.break.active::after
+{
+	content: url('/styles/rounded/breakpoint.png');
+}
+
+
+td.cursor
+{
+	min-width: 2em;
+	width: 2em;
+	font-size: 1.2ex;
+	cursor: default;
+	border-left: solid 1px;
+	border-color: var(--codeseparator);
+}
+
+td.cursor.active::after
+{
+	content: url('/styles/rounded/cursor.png');
+}
+
+td.cursor.index::after
+{
+	content: url('/styles/rounded/index.png');
+}
+
+tr.code:first-child td.cursor
+{
+	border-top: solid 1px;
+	border-color: var(--codeseparator);
+}
+
+tr.code:last-child td.cursor
+{
+	border-bottom: solid 1px;
+	border-color: var(--codeseparator);
+}
+
+pre.code
+{
+	display: inline-block;
+	padding: 0px;
+	margin: 0px;
+	padding-right: 3px;
+	min-height: 16px;
+}
+
+span.indent
+{
+	width: 20px;
+	display: inline-block;
+}
+
+pre.code span.comment
+{
+	color: var(--codecomment);
+}
+
+pre.code span.instruction
+{
+	font-weight: bold;
+	color: var(--codeinstruction);
+}
+
+pre.code span.type
+{
+	color: var(--codetype);
+}
+
+pre.code span.constant
+{
+	color: var(--codeconstant);
+}
+
+pre.code span.keyword
+{
+	font-weight: bold;
+	color: var(--codekeyword);
+}
+
+pre.code span.operator
+{
+	color: var(--codeoperator);
+}
+
+pre.code span.marker
+{
+	color: var(--codemarker);
+}
+
+div.button.delete::after
+{
+	content: url('/styles/rounded/delete.png');
+}
+
+div.button.open::after
+{
+	content: url('/styles/rounded/open.png');
+}
+
+div.button.cannot_open::after
+{
+	content: url('/styles/rounded/cannot-open.png');
+}
+
+div.button.follow::after
+{
+	content: url('/styles/rounded/follow.png');
+}
+
+td.pointer
+{	
+	color: var(--memorypointerfg);
+	background-color: var(--memorypointerbg);
+}
+
+table.breakpoints td.text
+{
+	border: solid 1px;
+}
+
+div.form
+{
+	border: solid 1px;
+}
+
+div.form div.field
+{
+	padding-top: 2px;
+}
+
+div.form .label
+{
+	margin-right: 3px;
+}
+
+div.form .label::after
+{
+	content: ":";
+}
+
+div.form .invalid::after
+{
+	content: url('/styles/rounded/invalid.png');
+}
+
+div.tool_bar_top
+{
+	height: 2ex;
+ 	font-size: 1.5ex;
+	padding: 0.25ex;
+	border-bottom: solid 1px var(--windowtoolbarborder);
+}
+
+div.tool_bar_bottom
+{
+	height: 2em;
+	border-top: solid 1px var(--windowtoolbarborder);
+	padding-top: 2px;
+	padding-left: 2px;
+}
+
+div.zone_bottom
+{
+	border-top: solid 1px var(--windowtoolbarborder);
+	padding-top: 2px;
+	padding-left: 2px;
+}

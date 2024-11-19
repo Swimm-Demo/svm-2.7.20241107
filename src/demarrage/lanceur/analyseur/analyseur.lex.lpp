@@ -1,0 +1,81 @@
+/*
+ * Simple Virtual Machine - A versatile and robust architecture to
+ * easily write applications.
+ * Copyright (C) 2021  Julien BRUGUIER
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+%{
+#include <src/global/global.h>
+#include <src/demarrage/lanceur/analyseur/includes.h>
+
+#define YY_USER_ACTION yylloc->first_line = yylloc->last_line = yylineno;
+
+%}
+
+%option nounput
+%option reentrant
+%option bison-bridge
+%option bison-locations
+%option noyywrap
+
+%s ISOLATION
+
+%%
+<INITIAL>(0|[1-9][0-9]*)				{ yylval->entier = ::atoi(yytext); return ENTIER; }
+<INITIAL>[a-z][a-z0-9_]*				{ yylval->chaine = std::string(yytext,yyleng); return IDENTIFIANT; }
+<INITIAL>\"([^\\"\n]|\\.)*\"				{ std::string token(yytext,yyleng); yylval->chaine = SVM::Global::Chaine::desechappe(token.substr(1,token.size()-2)); return CHAINE_MONOLIGNE; }
+<INITIAL>\"([^\\"\n]|\\.)*\n				{ return _INVALIDE_; }
+<INITIAL>-[a-zA-Z0-9]					{ std::string token(yytext,yyleng); yylval->chaine = token.substr(1); return VALEUR_OPTION; }
+<INITIAL>--						{ return SEPARATEUR; }
+<INITIAL>\.						{ return POINT; }
+<INITIAL>DEBUG						{ return DEBUGUEUR; }
+<INITIAL>PERF						{ return PERFORMANCE; }
+<INITIAL>NETWORK					{ return NETWORK; }
+<INITIAL>STYLE						{ return STYLE; }
+<INITIAL>CLIENTS					{ return CLIENTS; }
+<INITIAL>SECURITY					{ return SECURITE; }
+<INITIAL>LOG						{ return LOG; }
+<INITIAL>PLUGIN						{ return PLUGIN_FILE; }
+<INITIAL>LOCAL						{ return LOCAL_PLUGIN; }
+<INITIAL>OPTION						{ return OPTION; }
+<INITIAL>FLAG						{ return FLAG; }
+<INITIAL>MULTIPLE					{ return MULTIPLE; }
+<INITIAL>STR						{ return STR; }
+<INITIAL>INT						{ return INT; }
+<INITIAL>HELP						{ return HELP; }
+<INITIAL>ARGUMENT					{ return ARGUMENT; }
+<INITIAL>ARGUMENTS					{ return ARGUMENTS; }
+<INITIAL>PROCESS					{ return PROCESS; }
+<INITIAL>CODE						{ return CODE; }
+<INITIAL>FILE						{ return INCLUDE_FILE; }
+<INITIAL>SERVER						{ return SERVER; }
+<INITIAL>QUIET						{ return QUIET; }
+<INITIAL>END						{ return END; }
+<INITIAL>MEMORY						{ return TOKEN_MEMORY; }
+<INITIAL>SCHEDULER					{ return SCHEDULER; }
+<INITIAL>SEQUENCER					{ return SEQUENCER; }
+<INITIAL>AUTOTERMINATED					{ return AUTOTERMINATED; }
+<INITIAL>INLINE[ \t]*(#.*)?\r?\n			{ ++yylineno; BEGIN(ISOLATION); return INLINE; }
+<INITIAL>DESCRIPTION[ \t]*(#.*)?\r?\n			{ ++yylineno; BEGIN(ISOLATION); return DESCRIPTION; }
+<INITIAL>INLINE[ \t]*[^ \t\n#].*\r?\n			{ ++yylineno; return _INVALIDE_; }
+<INITIAL>DESCRIPTION[ \t]*[^ \t\n#].*\r?\n		{ ++yylineno; return _INVALIDE_; }
+<ISOLATION>[ \t]*END[ \t]*(#.*)?\r?\n			{ ++yylineno; BEGIN(INITIAL); }
+<ISOLATION>.*\r?\n					{ ++yylineno; yylval->chaine = std::string(yytext,yyleng); return LIGNE; }
+<INITIAL>#.*\r?\n					{ ++yylineno; }
+[ \t]							{ }
+\r?\n							{ ++yylineno; }
+.							{ return _INVALIDE_; }
+%%

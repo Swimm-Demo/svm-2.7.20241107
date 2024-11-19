@@ -1,0 +1,134 @@
+/*
+ * Simple Virtual Machine - A versatile and robust architecture to
+ * easily write applications.
+ * Copyright (C) 2021  Julien BRUGUIER
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+%{
+#include <src/global/global.h>
+#include <src/machine/elements/programme/analyseur/includes.h>
+
+#define YY_USER_ACTION yylloc->first_line = yylloc->last_line;
+
+%}
+
+%option yy_scan_string
+%option nounput
+%option reentrant
+%option bison-bridge
+%option bison-locations
+%option noyywrap
+
+%s ISOLATION
+
+%%
+(0|[1-9][0-9]{0,17})				{ yylval->entier = ::atol(yytext); return ENTIER; }
+[a-z][a-z0-9_]*					{ yylval->chaine = std::string(yytext,yyleng); return IDENTIFIANT; }
+\"([^\\"\n]|\\.)*\"				{ std::string token(yytext,yyleng); yylval->chaine = SVM::Global::Chaine::desechappe(token.substr(1,token.size()-2)); return CHAINE_MONOLIGNE; }
+\"([^\\"\n]|\\.)*\r?\n				{ return _INVALIDE_; }
+\"\"\"([^"]|\"[^"]|\"\"[^"]|\r?\n)*\"\"\"	{ std::string token(yytext,yyleng); yylloc->last_line+=std::count(token.begin(),token.end(),'\n'); yylval->chaine = token.substr(3,token.size()-6); return CHAINE_MULTILIGNE; }
+TRUE						{ return VRAI; }
+FALSE						{ return FAUX; }
+"("						{ return DEBUT_PARENTHESE; }
+")"						{ return FIN_PARENTHESE; }
+"["						{ return DEBUT_CROCHET; }
+"]"						{ return FIN_CROCHET; }
+"{"						{ return DEBUT_ACCOLADE; }
+"}"						{ return FIN_ACCOLADE; }
+,						{ return VIRGULE; }
+;						{ return POINT_VIRGULE; }
+&						{ return ADRESSE; }
+\+						{ return PLUS; }
+-						{ return MOINS; }
+\*						{ return FOIS; }
+\/						{ return DIVISION; }
+\$						{ return SYMBOLE; }
+\.						{ return POINT; }
+!						{ return EXCLAMATION; }
+\?						{ return INTERROGATION; }
+@						{ return LECTURE_MEMOIRE; }
+:						{ BEGIN(ISOLATION); return DEUX_POINTS; }
+\<						{ return INFERIEUR; }
+>						{ return SUPERIEUR; }
+\<\<						{ return INFERIEUR_INFERIEUR; }
+>>						{ return SUPERIEUR_SUPERIEUR; }
+\<>						{ return INFERIEUR_SUPERIEUR; }
+=						{ return EGAL; }
+\<=						{ return INFERIEUR_OU_EGAL; }
+=>						{ return SUPERIEUR_OU_EGAL; }
+:when						{ return QUAND; }
+:unless						{ return PAS_QUAND; }
+->						{ return AFFECTATION; }
+:label						{ return INSTRUCTION_LABEL; }
+:symbol						{ return INSTRUCTION_SYMBOL; }
+:goto						{ return INSTRUCTION_GOTO; }
+:call						{ return INSTRUCTION_CALL; }
+:return						{ return INSTRUCTION_RETURN; }
+:shutdown					{ return INSTRUCTION_SHUTDOWN; }
+:local						{ return INSTRUCTION_LOCAL; }
+:shift						{ return INSTRUCTION_SHIFT; }
+:library					{ return INSTRUCTION_LIBRARY; }
+:flag						{ return INSTRUCTION_FLAG; }
+:interruption					{ return INSTRUCTION_INTERRUPTION; }
+:memory						{ return INSTRUCTION_MEMORY; }
+:debug						{ return INSTRUCTION_DEBUG; }
+P						{ return POINTEUR_COURANT; }
+CONST						{ return CONST; }
+SIZE						{ return TAILLE; }
+FAILURE						{ return INTERRUPTION_ECHEC; }
+PROCESSOR					{ return INTERRUPTION_PROCESSEUR; }
+MEMORY						{ return INTERRUPTION_MEMOIRE; }
+TERMINATE					{ return INTERRUPTION_TERMINAISON; }
+NUMERIC						{ return INTERRUPTION_NUMERIQUE; }
+FIRST						{ return INTERRUPTION_PREMIER; }
+SECOND						{ return INTERRUPTION_SECOND; }
+SECURITY					{ return INTERRUPTION_SECURITE; }
+DEVICE						{ return INTERRUPTION_PERIPHERIQUE; }
+CLONE						{ return INTERRUPTION_CLONE; }
+TERMINAL					{ return INTERRUPTION_TERMINAL; }
+GENERIC						{ return INTERRUPTION_GENERIC; }
+RAISED						{ return LEVE; }
+DEFINED						{ return DEFINI; }
+INITIALISED					{ return INITIALISE; }
+IN						{ return DANS; }
+IS						{ return EST; }
+CALLABLE					{ return APPELABLE; }
+DEBUG						{ return DEBUGUEUR; }
+<INITIAL>CASCADE				{ return CASCADE_MC; }
+<INITIAL>GLOBAL					{ return GLOBAL_MC; }
+<INITIAL>BREAK					{ return ARRET; }
+<INITIAL>ADD					{ return AJOUT; }
+<INITIAL>REMOVE					{ return ENLEVE; }
+<INITIAL>READ					{ return LECTURE; }
+<INITIAL>WRITE					{ return ECRITURE; }
+<INITIAL>ACCESS					{ return ACCES; }
+<INITIAL>FREE					{ return SUPPRESSION; }
+<INITIAL>EXPLAIN				{ return EXPLIQUE; }
+INT						{ return TYPE_ENTIER; }
+STR						{ return TYPE_CHAINE; }
+BLN						{ return TYPE_BOOLEEN; }
+PTR						{ return TYPE_POINTEUR; }
+LIB						{ return TYPE_BIBLIOTHEQUE; }
+SYM						{ return TYPE_SYMBOLE; }
+PEP						{ return TYPE_POINT_ENTREE_EXTENSION; }
+IRQ						{ return TYPE_INTERRUPTION; }
+AUTO						{ return TYPE_AUTOMATIQUE; }
+[A-Z][A-Z_0-9]*					{ yylval->chaine = std::string(yytext,yyleng); return MOT_CLEF; }
+[ \t]						{ }
+#.*$						{ }
+\r?\n						{ ++yylloc->last_line; /* nouvelle ligne */ BEGIN(INITIAL); return FIN_LIGNE; }
+.						{ return _INVALIDE_; }
+%%

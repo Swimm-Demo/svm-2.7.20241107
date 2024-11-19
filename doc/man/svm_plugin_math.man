@@ -1,0 +1,54 @@
+.TH "Simple Virtual Machine - Official plugin math" 7 "2020-12-10"
+.SH SYNOPSIS
+.B svm_plugin_math
+\- Simple Virtual Machine official plugin for mathematic management. 
+.SH DESCRIPTION
+This plugin introduces extra features to manage extended type
+.B real.number
+values.
+This plugin depends on the type real.number.
+.SH INVOKATION
+This plugin can be added to the Simple Virtual Machine using the directive:
+.nf
+
+PLUGIN "svmmath.so"
+
+.fi
+.SH CONTENT
+.SS INSTRUCTION math.acos real.number -> real.number
+This instruction returns the arc cosinus of its parameter.
+When the parameter is invalid, an NaN number is returned.
+.SS INSTRUCTION math.asin real.number -> real.number
+This instruction returns the arc sinus of its parameter.
+When the parameter is invalid, an NaN number is returned.
+.SS INSTRUCTION math.atan real.number -> real.number
+This instruction returns the arc tangent of its parameter.
+.SS INSTRUCTION math.cos real.number -> real.number
+When the parameter is invalid, an NaN number is returned.
+This instruction returns the cosinus of its parameter.
+.SS INSTRUCTION math.exp real.number -> real.number
+This instruction returns the natural exponential of its parameter.
+.SS INSTRUCTION math.ln real.number -> real.number
+This instruction returns the natural logarithm of its parameter.
+When the parameter is invalid, an NaN number is returned.
+.SS INSTRUCTION math.pi -> real.number
+This instruction returns the Pi number.
+.SS INSTRUCTION math.rpn ( [ INT real.number 'ADD' 'SUB' 'MUL' 'DIV' PEP ] | { PEP INT } ) + -> [ INT real.number ]
+This instruction evaluates a mathematical function using integers and real numbers in the reverse polish notation (aka. post-fixed operations: a ADD b is written a b ADD).
+The four classic arithmeric operations are available, but also function calls.
+A plugin entry point corresponds to a function call without parameters.
+The complex
+.B "{ PEP INT }"
+corresponds to a function call with parameters, where the number of parameters is indicated by the integer.
+The plugin entry point <plugin>.<entry> will trigger a call to the function
+Within this plugin, the math.pi, math.acos, math.asin, math.atan, math.com, math.exp, math.ln, math.sin, math.tan are provided.
+.B "FUNCTION <plugin>.math_<entry> [ INT real.number ] * -> [ INT real.number ]"
+.SS INSTRUCTION math.sin real.number -> real.number
+This instruction returns the sinus of its parameter.
+.SS INSTRUCTION math.tan real.number -> real.number
+This instruction returns the tangent of its parameter.
+.SH SEE ALSO
+.BR svm (1)
+for help on the Simple Virtual Machine.
+.SH AUTHOR
+The Simple Virtual Machine is designed, implemented and maintained by Julien Bruguier <===EMAILCONTACT===>.

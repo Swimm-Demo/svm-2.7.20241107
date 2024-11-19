@@ -1,0 +1,3456 @@
+.TH "Simple Virtual Machine" 1 "2020-12-10"
+
+
+.SH NAME
+.BR svm
+\- run the Simple Virtual Machine
+
+
+.SH SYNOPSIS
+.nf
+svm [-h] [-v] [-d port] [-p detail] application_file [application options] [application arguments]
+.fi
+.P
+When the application file is executable and starts with a shebang pointing to the svm binary:
+.nf
+=====================
+#!===PKGBINDIR===/svm
+=====================
+.fi
+the Simple Virtual Machine can be invoked with:
+.nf
+application_file [application options] [application arguments]
+.fi
+
+
+.SH DESCRIPTION
+This command launches the Simple Virtual Machine and starts the execution of the application described in the file given in argument.
+.P
+This virtual machine is designed to execute small application components written in C/C++ from a low level language, giving access to operating system concepts in a concise way.
+.P
+The architecture of the virtual machine aims to be simple, but not naive.
+It is flexible enough to adapt itself to complex applications.
+
+
+.SH OPTIONS
+.TP
+.B -h
+Displays the application help message.
+.TP
+.B -v
+Displays the Simple Virtual Machine license and version.
+.TP
+.B -d port
+Enables the debug mode and opens a TCP port to access the debugger facility using a web browser.
+.TP
+.B -p details
+Enables the performance mode to gather statistics on instruction execution, and produces a profiling and code coverage trace at the end of the execution.
+The details argument can be the "raw" value or a positive integer.
+
+
+.SH RETURN VALUES
+The svm command returns the code specified by the application, if any.
+Otherwise, it returns either 0 when all processes terminate correctly, or 125 if at least one process is interrupted or in error.
+.P
+If the virtual machine encounters an error during its booting phase, an error code 126 is returned.
+.P
+If an option or an argument is missing or invalid in the invokation parameters, an error code 127 is returned.
+
+
+.SH VIRTUAL MACHINE ARCHITECTURE
+.nf
++-- Machine -----------------------------------------------------------------------+
+|                                                                                  |
+| - Error reporting                                                                |
+|                                                                                  |
+|  +-- System ------------------------------------------------------------------+  |
+|  |                                                                            |  |
+|  |  +-- Schedulers --------------------------------------------------------+  |  |
+|  |  |                                                                      |  |  |
+|  |  | - S thread (one per scheduler)                                       |  |  |
+|  |  | - Scheduler data with references to managed processes                |  |  |
+|  |  |                                                                      |  |  |
+|  |  +----------------------------------------------------------------------+  |  |
+|  |                                                                            |  |
+|  |  +-- Processes ---------------------------------------------------------+  |  |
+|  |  |                                                                      |  |  |
+|  |  | - P thread (one per process)                                         |  |  |
+|  |  | - Link to scheduler (when attached to scheduler)                     |  |  |
+|  |  | - Kernel list                                                        |  |  |
+|  |  |                                                                      |  |  |
+|  |  |  +-- Sequencer ---------------------------------------------------+  |  |  |
+|  |  |  |                                                                |  |  |  |
+|  |  |  | - Sequencer data with references to managed kernels            |  |  |  |
+|  |  |  |                                                                |  |  |  |
+|  |  |  +----------------------------------------------------------------+  |  |  |
+|  |  |                                                                      |  |  |
+|  |  |  +-- Kernels -----------------------------------------------------+  |  |  |
+|  |  |  |                                                                |  |  |  |
+|  |  |  | - Processor                                                    |  |  |  |
+|  |  |  | - Memory                                                       |  |  |  |
+|  |  |  | - Access control                                               |  |  |  |
+|  |  |  | - Link to processus (when attached to process)                 |  |  |  |
+|  |  |  | - Link to sequencer (when attached to process)                 |  |  |  |
+|  |  |  |                                                                |  |  |  |
+|  |  |  +----------------------------------------------------------------+  |  |  |
+|  |  |                                                                      |  |  |
+|  |  +----------------------------------------------------------------------+  |  |
+|  |                                                                            |  |
+|  +----------------------------------------------------------------------------+  |
+|                                                                                  |
+|  +-- Base --------------------------------------------------------------------+  |
+|  |                                                                            |  |
+|  |  +-- Hardware interruptions ----+  +-- Debugger ------------------------+  |  |
+|  |  |                              |  |                                    |  |  |
+|  |  | - HwInt thread (OS signals)  |  | - D in thread (read from clients)  |  |  |
+|  |  | - Mapping to processors irq  |  | - D out thread (write to clients)  |  |  |
+|  |  |                              |  | - Trap manager                     |  |  |
+|  |  |                              |  |                                    |  |  |
+|  |  +------------------------------+  +------------------------------------+  |  |
+|  |                                                                            |  |
+|  |  +-- Plugins manager ---------------------------------------------------+  |  |
+|  |  |                                                                      |  |  |
+|  |  | - Plugin objects definition                                          |  |  |
+|  |  | - Plugin global variables                                            |  |  |
+|  |  |                                                                      |  |  |
+|  |  +----------------------------------------------------------------------+  |  |
+|  |                                                                            |  |
+|  +----------------------------------------------------------------------------+  |
+|                                                                                  |
++----------------------------------------------------------------------------------+
+.fi
+All elements present on this schema are explained below.
+
+
+.SH APPLICATION
+A Simple Virtual Machine application is described in a file passed as argument, usually with the .svm extension.
+This file contains all informations about the application to be executed by the Virtual Machine and is used by a boot loader to initialise the Virtual Machine.
+.P
+The application file directives has to be defined in the order given below.
+When not explicitly mentioned, each directive is written on a single line and specified only once in the application file.
+
+.SS Comments
+Comments starts with a hash sign (#) and ends at the end of the corresponding line, like in shell scripts.
+.P
+Comments can be put on every end of line.
+When the first line is a comment, it can contains a shebang to ease application invokation.
+
+.SS Architecture
+The first part of the application file drives the architecture of the Simple Virtual Machine for the related application.
+.TP
+.B Description
+The application description is a free text explaining what the application does.
+.IP
+This description is used when the application help is displayed.
+.IP
+The syntax is:
+.nf
+------------------------
+DESCRIPTION
+<application description
+on several lines>
+END
+------------------------
+.fi
+The keywords DESCRIPTION and END shall be alone on their line.
+.TP
+.B Logging
+The Simple Virtual Machine can emit log traces on exceptional events, like unexpected application errors.
+.IP
+.I
+The Simple Virtual Machine does not emit log traces by default.
+.IP
+To enable logging, one of the following directives has to be provided:
+.RS 7
+.TP
+.B Log on terminal
+The log traces are produced on the standard error.
+If the standard error is closed by the application, log traces are no longer emitted.
+.IP
+The syntax is:
+.nf
+-------------
+LOG [ QUIET ]
+-------------
+.fi
+.TP
+.B Log on file
+The log traces are appened to a file.
+If the file is not accessible for writing, an error is emitted on the standard error, unless the QUIET keyword is provided.
+.IP
+The syntax is:
+.nf
+--------------------------------
+LOG FILE "<file name>" [ QUIET ]
+--------------------------------
+.fi
+.TP
+.B Log on TCP socket
+The log traces are emitted on a TCP socket targetting a given IP address and port.
+If the socket can not be opened, an error is emitted on the standard error, unless the QUIET keyword is provided.
+An error is also emitted on each failing trace not emited due to a closed connection.
+The Simple Virtual Machine will try to reopen the connection in such case.
+.IP
+The syntax is:
+.nf
+---------------------------------------------------------------------------
+LOG SERVER "<IP address or domain name>" "<port or service name>" [ QUIET ]
+---------------------------------------------------------------------------
+.fi
+.RE
+.TP
+.B Debugger
+The debugger can be configured by a directive:
+.nf
+---------------------------------------------------------------------------------------------------------------------------------------------------
+DEBUG "<application name>" [ NETWORK "<binding ip>" ] [ STYLE "<style name>" ] [ CLIENTS <max number of clients> ] [ SECURITY <level> ] [ LOG ... ]
+---------------------------------------------------------------------------------------------------------------------------------------------------
+.fi
+where:
+.nf
++-----------------------------------+-----------------------+-----------------------------------------------------------------------+
+| Part                              | Default value         | Meaning                                                               |
++-----------------------------------+-----------------------+-----------------------------------------------------------------------+
+| "<application name>"              | Application file name | Debugger UI name in the web browser                                   |
+| NETWORK "<binding ip>"            | localhost             | Bind the debugger service on this IP for network accessibility        |
+| STYLE "<style name(:color name)>" | (see below)           | Style name for UI rendering, with optional color scheme name          |
+| CLIENTS <max number of clients>   | 100                   | Quota of connected clients                                            |
+| SECURITY <level>                  | 0                     | Number of symetric ciphering passes                                   |
+| LOG ...                           | LOG                   | Uses the log line syntax, for debugger connection credentials display |
++-----------------------------------+-----------------------+-----------------------------------------------------------------------+
+.fi
+For accepted values in binding IP addresses, a DNS name or IP referencing an host network interface or the 0.0.0.0/:: IP for all interfaces can be specified.
+.IP
+The accepted values for styles are ===DEBUG_STYLES===and the default value is "===DEBUG_DEFAULT_STYLE===".
+If the color part of the style name is not specified, the "default" one is used.
+When the value is invalid, the style "default:default" is used.
+If the web browser running the user interface supports alternate stylesheet selection, the style can be choosen dynamically.
+.IP
+The maximum number of clients will be silently set to 2 if an inferior value is specified.
+.IP
+The security level will be silently set to 255 if a superior value is specified.
+.TP
+.B Performance
+The performance mode can be configured by a directive:
+.nf
+---------------------------------------------------------------------------------------------------------------------------------------------------
+PERF LOG ...
+---------------------------------------------------------------------------------------------------------------------------------------------------
+.fi
+where the end of the directive follows the log line syntax, for performance output channel.
+.TP
+.B Plugins
+The architecture of the Simple Virtual Machine can be extended by plugins.
+(Please refer to the PLUGINS section below for more details.)
+.IP
+The directive is repeated for each inserted plugin to the Simple Virtual Machine architecture.
+Each plugin man page should specify which directive should be inserted into the application file to be used.
+.IP
+The syntax is:
+.RS 7
+.TP
+.B Official plugin
+.nf
+-------------------------------------
+PLUGIN "svm<official plugin name>.so"
+-------------------------------------
+.fi
+.TP
+.B System plugin
+.nf
+-------------------------------------
+PLUGIN "libsvm<plugin name>.so"
+-------------------------------------
+.fi
+The plugin is searched within the LD_LIBRARY_PATH directories, then the machine plugins directory and finally in the system libraries directories.
+.I It is recommended to avoid the use of the LD_LIBRARY_PATH environment variable whenever possible, as it can be used to insert an invalid plugin or can lead to unreproducible errors.
+.TP
+.B Relative plugin
+.nf
+-------------------------------------------
+PLUGIN "<relative path to .so plugin file>"
+-------------------------------------------
+.fi
+The path is relative to the directory where the application is launched.
+.I This method is not recommended, as it can be used to insert an invalid plugin.
+.TP
+.B Absolute plugin
+.nf
+-------------------------------------------
+PLUGIN "<absolute path to .so plugin file>"
+-------------------------------------------
+.fi
+.TP
+.B Local plugin
+.nf
+-------------------------------------------------
+LOCAL PLUGIN "<relative path to .so plugin file>"
+-------------------------------------------------
+.fi
+The path is relative to the application file directory.
+.TP
+.B Plugin configuration
+After the plugin path to the .so file, it is possible (and sometimes required) to add on the same line some options and arguments to configure the plugin.
+The syntax for an option is:
+.nf
+------------    ----------------------    -----------------------
+-<character> or -<character> <integer> or -<character> "<string>"
+------------    ----------------------    -----------------------
+.fi
+where the character is among letters, capital letters and digits, and integer is a positive or zero number (negative integers are not allowed as they may be like options).
+Several options can be added on the plugin line, but each option can not be put twice.
+The syntax for arguments is:
+.nf
+------------------------------------------------------------------------
+-- <integer or "string"> <integer or "string"> ... <integer or "string">
+------------------------------------------------------------------------
+.fi
+Some arguments may be required by the plugin with a precise type. They are placed at the beginning of the arguments, indexed from 0.
+.RE
+
+.SS Invokation
+The second part of the application file modifies the way the application is invoked from the shell.
+.TP
+.B Application help
+The command line option -h is reserved by the machine to display the application help and can not be used for another purpose.
+.IP
+This help is generated from the application description and texts associated to OPTION, ARGUMENT and ARGUMENTS directives described below.
+.TP
+.B Simple Virtual Machine Version
+The command line option -v is reserved by the machine to display the version of the software.
+.TP
+.B Debugger
+The command line option -d <port or service name> is reserved to start the application in debug mode.
+.TP
+.B Performance
+The command line option -p <details> is reserved to start the application in performance checks mode.
+.TP
+.B Options
+Any extra command line option accepted by the application can be specified by an OPTION directive.
+This directive is repeated for each accepted option.
+.IP
+The syntax is:
+.nf
+-----------------------------------------------------
+OPTION -<option> <type> <name> [ HELP "<help line>" ]
+-----------------------------------------------------
+.fi
+.IP
+The option is a letter or a digit and the name is an identifier in lower case.
+The type can be:
+.nf
++----------------------+-------------------+---------------------------------------+--------------------------------------+
+| Option type          | Value type        | Value when present                    | Value when absent                    |
++----------------------+-------------------+---------------------------------------+--------------------------------------+
+| FLAG                 | Boolean           | True                                  | False                                |
+| MULTIPLE FLAG        | Integer           | Number of times the option is present | 0                                    |
+| INT                  | Integer           | Integer present as option argument    | Uninitialised                        |
+| MULTIPLE INT         | Array of integers | Integers present as option argument   | Empty array                          |
+| STR                  | String            | String present as option argument     | Uninitialised                        |
+| MULTIPLE STR         | Array of strings  | Strings present as option argument    | Empty array                          |
++----------------------+-------------------+---------------------------------------+--------------------------------------+
+.fi
+.TP
+.B Mandatory arguments
+Mandatory positional arguments on the command line can be specified by an ARGUMENT directive.
+This directive is repeated for each accepted argument.
+.IP
+The syntax is:
+.nf
+---------------------------------------------
+ARGUMENT <type> <name> [ HELP "<help line>" ]
+---------------------------------------------
+.fi
+.IP
+The name is an identifier in lower case, and the type can be:
+.nf
++---------------+------------+
+| Argument type | Value type |
++---------------+------------+
+| INT           | Integer    |
+| STR           | String     |
++---------------+------------+
+.fi
+.TP
+.B Extra arguments
+Extra command line arguments can be specified by an ARGUMENTS directive.
+.IP
+The syntax is:
+.nf
+----------------
+ARGUMENTS <name>
+----------------
+.fi
+.IP
+The name is an identifier in lower case, and there is no type.
+.IP
+The application value is an array of strings where the first element is the application file name followed by the extra arguments on the command line.
+.P
+The HELP clause in the OPTION and ARGUMENT directives replaces the default help by the specified text line.
+The default help is the name associated to the directive.
+.P
+.I All names specified in OPTION, ARGUMENT and ARGUMENTS directives shall be unique.
+
+.SS Processes
+Processes are the application code description at boot time.
+(Please refer to the PROCESSES section for more details.)
+At least one process need to be defined, but several processes can be specified, by repeating the PROCESS directive.
+All processes will be launched after the machine boot.
+.IP
+The syntax is:
+.nf
+---------------------
+PROCESS "<name>"
+<code directive>
+<memory directive>
+<scheduler directive>
+<sequencer directive>
+<auto-terminated>
+END
+---------------------
+.fi
+The process name is a free monoline string only used for error reporting and debug.
+Unicity of process name is not required.
+.IP
+Each included directive is described below.
+.TP
+.B Code
+The code directive specifies the code executed by the processor of the first kernel of the process.
+(Please refer to the KERNELS section for more details.)
+.IP
+The syntax is:
+.nf
+-----------------------------------------
+CODE "<name>" FILE "<path and file name>"
+-----------------------------------------
+.fi
+when the code has to be included from a dedicated file, or
+.nf
+--------------------
+CODE "<name>" INLINE
+<instructions>
+END
+--------------------
+.fi
+when the code is inlined in the application file.
+The INLINE keyword shall be at the end of its line, and the END keyword shall be alone on its line.
+The code name is a free monoline string only used for error reporting and debug.
+Unicity of code name is not required.
+.IP
+The processor starts the execution at the first instruction of the code.
+(Please refer to the PROCESSORS section for more details.)
+.TP
+.B Memory
+The memory directive specifies how is initialised the memory of the first kernel of the process.
+(Please refer to the KERNELS section for more details.)
+.IP
+The syntax is:
+.nf
+----------------------------
+MEMORY <name 1> ... <name N>
+----------------------------
+.fi
+where each name can be either a name among the ones defined in OPTION, ARGUMENT and ARGUMENTS directives, or a string containing a regular expression to match names defined in OPTION, ARGUMENT and ARGUMENTS directives.
+.IP
+For each option or argument name matching one of the names present in this directive, an alias is defined into the memory to access to the values.
+(Please refer to the MEMORIES section for more details.)
+.TP
+.B Scheduler
+The scheduler directive specifies to which scheduler the process shall be attached.
+When not specfied, the default scheduler is chosen.
+(Please refer to the SCHEDULERS section for more details.)
+.IP
+The syntax is:
+.nf
+------------------------------
+SCHEDULER <plugin entry point>
+------------------------------
+.fi
+where the plugin entry point is the scheduler name.
+(Please refer to the CODES section for more details.)
+.IP
+.I The process is discarded when the scheduler refuses to attach the process, but the application is still started.
+.TP
+.B Sequencer
+The sequencer directive specifies which sequencer is used within the process.
+When not specfied, the default sequencer is chosen.
+(Please refer to the SEQUENCERS section for more details.)
+.IP
+The syntax is:
+.nf
+------------------------------
+SEQUENCER <plugin entry point>
+------------------------------
+.fi
+where the plugin entry point is a sequencer name.
+(Please refer to the CODES section for more details.)
+.TP
+.B Auto-terminated
+When the process should be auto-terminated, the keyword
+.nf
+--------------
+AUTOTERMINATED
+--------------
+.fi
+can be added to the process.
+.IP
+In the application, at least one process shall be not auto-terminated, or a boot error will be raised.
+
+
+.SH SYSTEM
+The system drives all execution in the Simple Virtual Machine.
+.P
+It manages the schedulers, starting them at boot time and terminating them at exit time.
+.P
+It also creates the initial processes defined in the application file and attach them to their relative schedulers.
+The system waits for process terminaison.
+It detachs them from their scheduler and destroy them once terminated.
+.P
+It also controls the terminaison of all processes and the machine:
+.TP
+.B Explicit request
+The Simple Virtual Machine system terminates all remaining processes.
+An explicit request for machine terminaison is associated to a return code. This code is returned to the operating system.
+.TP
+.B Non managed hardware interruption
+The systems immediately terminates all remaining processes.
+The Simple Virtual Machine is aborted.
+.TP
+.B No more code to execute
+The return code sent to the operating system is 0.
+
+.SH SCHEDULERS
+Schedulers enforce execution policies between subsets of processes.
+Different schedulers can be defined and used in one instance of the Simple Virtual Machine, each scheduler orchestrating its own subset of processes.
+
+.SS Attach and detach processes
+A process needs to be attached to one (and only one) scheduler to be controled by this scheduler.
+.P
+A process can be attached to a scheduler or detached from a scheduler by the system, another scheduler or another process.
+.I When this operation is done on a process, this process shall be locked by the entity doing the operation.
+.P
+The scheduler receiving the attach or the detach request can accept or refuse the process depending on its policy.
+
+.SS Schedule processes
+Once attached to a scheduler, a process execution is managed by this scheduler through events exchanged between the two entities.
+.P
+Each time the process sends a process state change to the scheduler, the dedicated schedule function of the scheduler is called.
+(Please refer to the PROCESSES section for more details.)
+Depending on the process and its new state, the scheduler can send commands to processes it controls.
+.I It is recommended to consider only the state passed as parameter of the schedule function. Reading the state of the process may give different result, and is not reliable.
+.P
+The main commands are: run a process, suspend a process, terminate a process.
+Other process manipulation can be done, but may require to acquire and keep a lock on the process during the whole change.
+.P
+The schedule function shall return an unsigned integer also representing a duration in milliseconds, for timer management.
+
+.SS Timers
+Time management may be crucial for some scheduling policies.
+.P
+Each scheduler can define a duration in milliseconds by returning a non-zero unsigned integer from the schedule function and the notification functions.
+.P
+When this duration is reached before a process sends a state change, the dedicated notification function of the scheduler is called in timer mode, with the delay as parameter.
+In this functions, commands can be sent to processes like in the schedule function.
+
+.SS Notifications
+On top of the timers, schedulers can receive notifications with an unsigned integer parameter.
+.P
+When a notification is received, the notification function is called in notification mode with the unsigned integer as parameter.
+.P
+This allows a scheduler to react to custom events to trigger dedicated actions or change its behavior.
+
+.SS Default scheduler
+One scheduler is defined within the Simple Virtual Machine.
+.P
+This scheduler accepts only one process at a time, and triggers execution of this process at most as possible.
+
+.SS Plugin schedulers
+Other schedulers, managing several processes, can be defined within plugins.
+(Please refer to the PLUGIN OBJECT SCHEDULERS section for more details.)
+
+.SS Technical considerations
+A structure can be associated to each scheduler in order to keep a state between the different calls to the scheduler functions.
+.P
+Each scheduler is also associated to an operating system thread (having a name starting with a S) to react independently to scheduling events.
+
+
+.SH PROCESSES
+Processes are application execution containers.
+.I Within a process, at most one instruction shall be executed.
+When this condition is not respected, the application can be considered corrupted.
+.P
+All private resources included in one process can be accessed by this process without any synchronization mechanism.
+Resources accessibles from other processes, or resources outside one process will require synchronisation.
+Such synchronisation mechanism is provided in the Simple Virtual Machine.
+.P
+A process can execute instructions in differents execution contextes called kernels, activated in a sequence.
+(Please refer to KERNELS and SEQUENCERS sections for more details.)
+
+.SS States
+Each process has an execution status reflecting its internal activities:
+.nf
++-------------+----------------------------------------------------------------------+------------------------+
+| State       | Meaning                                                              | Usual scheduler action |
++-------------+----------------------------------------------------------------------+------------------------+
+| RUNNING     | Instructions are executed, process can react to commands             | Suspend, Terminate     |
+| SUSPENDED   | Instructions are not executed, process ready to resume execution     | Run, Terminate         |
+| WAITING     | Instructions are executed, process can not react to commands         | Run another process    |
+| LOCKED      | Instructions are not executed, process not ready to resume execution | Run another process    |
+| DEBUG       | Instructions are not executed, process is managed by the debugger    | Nothing                |
+| ZOMBIE      | Process terminated in normal condition                               | Nothing                |
+| INTERRUPTED | Process terminated in abnormal condition                             | Nothing                |
+| ERROR       | Process corrupted                                                    | Nothing                |
++-------------+----------------------------------------------------------------------+------------------------+
+.fi
+.P
+When a process exits the states WAITING or LOCKED, they switch to SUSPENDED state.
+It is up to the scheduler to change its state to RUNNING by sending a run command to the process.
+.P
+When a process exits the state DEBUG, it immediately returns to the RUNNING state.
+.I A scheduler receiving a DEBUG state shall not trigger the execution of another process, as it may violate its own execution policy.
+.P
+Once a process reaches the ZOMBIE, INTERRUPTED or ERROR state, it will not react to commands anymore and can not be locked by other processes or schedulers.
+
+.SS Terminaison
+A process terminates when the sequencer associated to the process returns no valid kernel to run.
+(Please refer to KERNELS and SEQUENCERS sections for more details.)
+.P
+When the last kernel exits normally, the process is put in ZOMBIE state.
+When the last kernel exits with an interruption, the process can be put in INTERRUPTED state depending on the kernel configuration.
+(Please refer to the KERNELS section for more details.)
+.P
+If a process is flagged as auto-terminated, the system will automatically terminate the process when the last process not having the auto-terminated attribute terminates.
+
+.SS Locks
+When a process or a scheduler needs to modify another process, it shall gain the ownership on this process through a lock to avoid concurrent access to the resources of the locked process.
+A process shall also be locked to be attached to a scheduler or detached from a scheduler.
+.P
+.I A terminated process can never be locked.
+.I A process can not get a lock on itself, as it always owns itself.
+A process can be locked only once at a given time, but lock requests can be stacked and a process trying to acquire a lock on a remote locked process may wait until the lock is released by another entity.
+.P
+The Simple Virtual Machine has some mechanisms to avoid dead locks, and an error is issued when a dead lock is detected.
+.P
+.I When a lock on a process is acquired, the lock is owned by the entity which has required it and can not be transferred to another entity.
+
+.SS Technical considerations
+Each process is also associated to an operating system thread (having a name starting with a P) to react to scheduler and other processes events.
+
+
+.SH SEQUENCERS
+A sequencer orchestrates the execution of the kernels within a process.
+.I Only one kernel can be in running state within a process.
+Kernels are then executed in a sequence controled by a sequencer enforcing an execution policy within a process.
+(Please refer to the KERNELS section for more details.)
+.P
+Each process has one sequencer associated when the process is created.
+
+.SS Attach and detach kernels
+A kernel shall be attached to a sequencer to be selected by this sequencer for execution.
+.P
+To attach a kernel to a process or to detach a kernel from a sequencer, the process owning the sequencer shall be locked by the requestor.
+.P
+Once a sequencer accepts a kernel, the kernel is also attached to the process.
+The kernel is detached from the process when the kernel is successfully detached from the sequencer.
+
+.SS Current kernel
+When a kernel is suspended, terminated or interrupted, the process calls the dedicated current kernel function of the sequencer to know which kernel shall be executed.
+.P
+If this function returns no valid kernel, the process terminates.
+
+.SS Default sequencer
+One sequencer is defined within the Simple Virtual Machine.
+.P
+This sequencer accepts only one kernel.
+
+.SS Plugin sequencers
+Other sequencers, managing several kernels, can be defined within plugins.
+(Please refer to the PLUGIN OBJECT SEQUENCERS section for more details.)
+
+
+.SH KERNELS
+A kernel is the smallest execution context and contains one processor and one memory.
+.P
+Both processor and memory are linked: Instructions executed by the processor of a kernel will access to the memory of the same kernel.
+
+.SS States
+Each kernel has a state representing its internal status:
+.nf
++-------------+-----------------------------------------------------------------------------+
+| State       | Meaning                                                                     |
++-------------+-----------------------------------------------------------------------------+
+| RUNNING     | Instructions are executed                                                   |
+| WAITING     | Instructions are executed, but current instruction is flagged waiting       |
+| SUSPENDED   | Instructions are not executed, but can be selected by sequencer to continue |
+| DEBUG       | Instructions are not executed, process is managed by the debugger           |
+| ZOMBIE      | Kernel terminated in normal condition                                       |
+| INTERRUPTED | Kernel terminated in abnormal condition                                     |
+| ERROR       | Kernel corrupted                                                            |
++-------------+-----------------------------------------------------------------------------+
+.fi
+When the kernel is terminated, any execution attempt will return immediately.
+
+.SS Configuration
+When created, a kernel accepts several flags.
+.TP
+.B Transmit interruption
+This flag controls the behavior when the kernel is interrupted:
+.nf
++-------+------------------------------------------+-----------------------------+
+| Value | Next kernel                              | No next kernel              |
++-------+------------------------------------------+-----------------------------+
+| false | Next kernel starts/continues normally    | Process becomes zombie      |
+| true  | Next kernel starts/continues interrupted | Process becomes interrupted |
++-------+------------------------------------------+-----------------------------+
+.fi
+When the interruption is transmitted to another kernel, the receiving kernel is interrupted with the same interruption.
+.TP
+.B Last return is shutdown
+This flag controls the behavior when a return instruction is used on an empty return stack:
+.nf
++-------+------------------------------------------------+
+| Value | Behavior                                       |
++-------+------------------------------------------------+
+| false | Kernel is interrupted (PROCESSOR interruption) |
+| true  | Processor is shut down, kernel becomes zombie  |
++-------+------------------------------------------------+
+.fi
+(Please refer to the PROCESSORS section for more details.)
+.TP
+.B Protected mode
+This flag controls the behavior when a system instruction execution is attempted:
+.nf
++-------+-----------------------------------------------+
+| Value | Behavior                                      |
++-------+-----------------------------------------------+
+| false | Instruction is executed                       |
+| true  | Kernel is interrupted (SECURITY interruption) |
++-------+-----------------------------------------------+
+.fi
+The SECURITY interruption is raised before the system instruction execution.
+.IP
+Any new kernel created from a kernel in protected mode is forced in protected mode, even if in another process.
+Some operations may have an altered behavior to avoid application freezes.
+
+.SS Access control
+When the kernel is in protected mode, some quotas can be set to limit execution.
+Quotas are shared between all kernels created from the first kernel creating the quotas.
+Quotas can be restricted by another kernel, but never enlarged.
+.TP
+.B Instruction count
+When set, the number of instructions executed from this kernel is limited.
+Any extra execution attempt triggers a SECURITY interruption.
+.TP
+.B Memory allocation
+When set, the number of addresses allocated into the memory is limited.
+Any extra allocation attempt triggers a SECURITY interruption.
+
+.SS Core dumps
+.I Exiting a kernel with an interruption is always considered as an abnormal event.
+When it happens, a textual representation of the interrupted kernel is produced on a log trace.
+.P
+This log trace is a core dump.
+When the transmit interruption flag is set, several kernels can produce a core dump in a row.
+
+
+.SH PROCESSORS
+The processor drives the execution of the Simple Virtual Machine code.
+(Please refer to the CODES section for more details.)
+
+.SS Registers
+The set of registers of the processor is the current state of the processor.
+.TP
+.B Next instruction address
+This register contains the code address of the next instruction the process will execute when the current instruction execution is completed.
+.IP
+The address contains a link to a code and the local address of the instruction within this code.
+(Please refer to the CODES section for more details.)
+.IP
+This register is modified to perform jumps and function calls.
+.IP
+When this register contains an address corresponding to no instruction, the processor shuts down without any error.
+Letting the processor execute code after the last instruction is equivalent to add a shutdown instruction at the end of the code.
+.TP
+.B Current memory pointer
+This register contains a pointer to the memory.
+The memory zone pointed by this register usually contains function parameters.
+(Please refer to the MEMORIES section for more details.)
+.TP
+.B Flags
+This register contains a set of strings used as flags.
+These flags can be used to tag levels of the return stack.
+.IP
+Flags can be set or reset, and tested in conditions.
+.IP
+When a flag is set or reset, it can be local to the current function, or also cascaded to all functions calls done from the current function.
+
+.SS Return stack
+The processor contains a stack of states used to enable use of functions.
+.P
+Each time a function call is done, the current state is pushed onto the stack.
+When the code returns from a function, the top of the stack is taken to restore the registers, unless the stack is empty.
+(Please refer to KERNELS and CODES sections for more details.)
+
+.SS Interruption handlers
+Interruptions are a way to change the code execution in an unexpected way.
+.P
+When the processor receives an interruption, the execution of the code is stopped by default.
+It is possible to change this behavior and trigger a function call to a dedicated code address to handle the interruption.
+.TP
+.B Local handler
+A handler can be set or reset for each interruption type, limited to the current function.
+Function calls done from the function defining such handler will not see this handler defined.
+.IP
+When a local handler is defined of an interruption, this handler overrides all other interruption handlers for this interruption.
+.IP
+This handler is activated only by software interruptions.
+(Please refer to the SOFTWARE INTERRUPTIONS section for more details.)
+.TP
+.B Local cascade handler
+A handler can be set or reset for each interruption type, limited to the current function and cascaded to all functions calls done from this function.
+.IP
+When a local cascade handler is defined of an interruption, this handler overrides the global interruption handler for this interruption.
+.IP
+This handler is activated only by software interruptions.
+(Please refer to the SOFTWARE INTERRUPTIONS section for more details.)
+.TP
+.B Global handler
+A handler can be set or reset for each interruption type regardless the function call.
+The scope of such handler is extended to the whole kernel existence.
+.IP
+This handler is activated by software interruptions and hardware interruptions.
+(Please refer to SOFTWARE INTERRUPTIONS and HARDWARE INTERRUPTIONS sections for more details.)
+
+.SS Instruction overrides
+For some instruction addresses, the processor may have an instruction override.
+When the current instruction address matches one override, the instruction from the override is executed instead of the one from the code at the same instruction address.
+.P
+.I Use this feature with caution as it can obfuscate the code execution. Use it preferably for code testing.
+
+.SS Instructions flow
+Without any action, the processor executes instructions in the order they appear in the code.
+To achieve this, each time the processor gets an instruction to execute, it also modifies the next instruction address register by incrementing the local instruction address.
+.I When the local instruction address overflows the code size, the processor shuts down.
+This succession of instructions is the canonical instructions flow.
+.TP
+.B Jumps
+Jumps are a first way to change the instructions flow, by modifying the next instruction address register.
+.IP
+The initial instruction address is forgotten, a jump is only a one-way move to another part of the code.
+.TP
+.B Function calls
+Function calls store the current state of the processor on the return stack.
+Then the next instruction address register and the current memory pointer register are modified to initialise the function context.
+Only cascaded interruption handlers and cascaded flags are also kept in the processor state.
+.IP
+When the function ends, a return is performed by replacing the state of the processor by the stored state of the processor located on the return stack.
+.IP
+The initial instruction address is kept, a function call is a back-and-forth move to another part of the code.
+
+
+.SH SOFTWARE INTERRUPTIONS
+A software interruption is the way instructions can raise errors.
+When an error occurs during an instruction execution, its execution can be stopped.
+The processor is then interrupted with an interruption describing the type of occured error.
+The instruction documentation should list the possible raised interruptions with their associated root cause.
+
+.SS Built-in interruptions
+Some interruptions are defined within the Simple Virtual Machine:
+.nf
++--------------+---------------------------------------+
+| Interruption | Usual meaning                         |
++--------------+---------------------------------------+
+| FAILURE      | Generic error                         |
+| PROCESSOR    | Execution error                       |
+| MEMORY       | Memory access error                   |
+| SECURITY     | Security violation                    |
+| TERMINATE    | Program termination request           |
+| NUMERIC      | Numeric error                         |
+| DEVICE       | Device error                          |
+| CLONE        | Child process terminaison             |
+| FIRST        | Custom error one                      |
+| SECOND       | Custom error two                      |
+| TERMINAL     | Terminal change                       |
+| GENERIC      | Non categorised hardware interruption |
++--------------+---------------------------------------+
+.fi
+
+.SS Plugin interruptions
+Other interruption types can be defined by plugins.
+(Please refer to the PLUGIN OBJECT INTERRUPTIONS section for more details.)
+
+
+.SH HARDWARE INTERRUPTIONS
+Some UNIX signals are considered by the Simple Virtual Machine as hardware interruptions, when at least one processor has a global interruption handler for the corresponding interruption.
+.P
+A singleton component within the base waits for UNIX signals and generates a hardware interruption corresponding to the signal:
+.nf
++----------+--------------+------------------+
+| Signal   | Interruption | Default behavior |
++----------+--------------+------------------+
+| SIGSTOP  |              | Stop             |
+| SIGTSTP  |              | Stop             |
+| SIGCONT  |              | Continue         |
+| SIGSEGV  |              | Abort/Coredump   |
+| SIGABRT  | FAILURE      | Abort            |
+| SIGQUIT  | FAILURE      | Quit             |
+| SIGALRM  | TERMINATE    | Terminate        |
+| SIGTERM  | TERMINATE    | Terminate        |
+| SIGINT   | TERMINATE    | Terminate        |
+| SIGHUP   | TERMINATE    | Terminate        |
+| SIGILL   | PROCESSOR    | Abort            |
+| SIGFPE   | NUMERIC      | Abort            |
+| SIGPIPE  | DEVICE       | Abort            |
+| SIGBUS   | DEVICE       | Abort            |
+| SIGCHLD  | CLONE        | Collect child    |
+| SIGUSR1  | FIRST        | Ignore           |
+| SIGUSR2  | SECOND       | Ignore           |
+| SIGTTIN  | TERMINAL     | Ignore           |
+| SIGTTOU  | TERMINAL     | Ignore           |
+| SIGWINCH | TERMINAL     | Ignore           |
+| Other    | GENERIC      | Ignore           |
++----------+--------------+------------------+
+.fi
+(Please refer to the PROCESSORS section for more details.)
+.P
+When no processor defines an handler for the corresponding hardware interruption, the default behavior is applied.
+
+
+.SH MEMORIES
+The memory contains all data accessible to instructions within a kernel.
+
+.SS Addresses
+Each value stored in the memory is located at a given address.
+A memory address is an unsigned integer dedicated to data localisation.
+.P
+Memory addresses are used when only one value has to be manipulated from or to the memory.
+So, read and write operations require a memory address.
+
+.SS Pointers
+Pointers are also a concept to locate values in memory.
+.P
+One difference with memory addresses is the ability of pointers to be stored into the memory as a value.
+But the main difference comes from the structure of a pointer.
+Unlike physical architectures, pointers on the Simple Virtual Machine contain a memory address and a size.
+.I A pointer always refers to a zone in the memory rather than a single location.
+
+.SS Aliases
+An alias is an identifier in lower case linked to a pointer in a memory.
+When an alias is defined, it can be used like any pointer.
+.P
+.I The alias definition is attached to the memory, regardless the position in the code where it is defined.
+Aliases can act as static global variables in the code.
+.P
+Some aliases are defined by the boot loader depending on the process definition in the application file, to access command line options and arguments.
+(Please refer to the APPLICATION section for more details.)
+
+.SS Allocation
+When the memory itself is created, no address is valid.
+Memory addresses have to be allocated manually using instructions.
+When a memory address is allocated, it contains no value.
+.TP
+.B Defined memory address
+A memory address is said defined when an allocation created this address and can store a value.
+The same address is said undefined otherwise.
+A defined memory address supports write operation only.
+.TP
+.B Initialised memory address
+A memory address is said initialised when defined and when it contains an associated value.
+The same address is said uninitialised otherwise.
+An initialised memory address supports read and write operations.
+
+.SS Free
+Memory is automatically freed by the Simple Virtual Machine on function returns.
+.P
+To achieve this, each processor state contains the memory zones allocated during the function execution and their corresponding aliases.
+Such memory zones are called local memory.
+.P
+While allocating memory, it is possible to avoid adding the memory to the processor state to avoid deletion at function return.
+Such memory zones are called global memory, and should be transformed into local memory to be freed at the next function return.
+.P
+When the memory itself is destroyed, all remaining defined memory addresses are freed.
+
+.SS Types
+Each defined memory address is associated to a type.
+.P
+This type indicates which kind of data can be stored into this address, and limits the operations performed on the stored values.
+.P
+Any read or write operation will do a type check compliance before doing the operation.
+When the type check fails, a MEMORY interruption is raised.
+.TP
+.B Buit-in types
+Some types are defined within the Simple Virtual Machine, as they are used in built-in instructions.
+(Please refer to the INSTRUCTION SET section for more details.)
+.nf
++------+-------------------------------------------------------------------+-------------------------------------------------------------+
+| Type | Usage                                                             | Structure                                                   |
++------+-------------------------------------------------------------------+-------------------------------------------------------------+
+| INT  | Integer, for counters, pointer indexes and memory addresses shift | A 64 bits signed integer                                    |
+| STR  | String, for jumps, code compilation and flags                     | A character buffer with its length                          |
+| BLN  | Boolean, for conditions                                           | A boolean                                                   |
+| PTR  | Pointer, for memory access                                        | A memory address and an integer as size                     |
+| LIB  | Library, for modular code execution                               | A name and a Simple Virtual Machine code                    |
+| SYM  | Symbol, for global jumps and functions calls into libraries       | A library and the local instruction address in the library  |
+| IRQ  | Interruption                                                      | An interruption                                             |
+| PEP  | Plugin Entry Point, for plugin objects references                 | A plugin name and an object name (Type deduced from syntax) |
+| AUTO | Automatic, used when type is know at first write into memory      |                                                             |
++------+-------------------------------------------------------------------+-------------------------------------------------------------+
+.fi
+All these types (except the AUTO and LIB ones) can be constructed as constants into the code, can be transformed into a string for display and can be copied.
+.TP
+.B Plugin types
+Other types, containing dedicated data, can be defined within plugins.
+(Please refer to the PLUGIN OBJECT TYPES section for more details.)
+
+.SS Values
+A value is any data having a type and storable into a memory.
+.P
+Some values are constants written into the Simple Virtual Machine code, while others are created within instructions.
+.P
+For each type, a null value exists: it is a dedicated value corresponding to a non-initialised value.
+.I In particular, a null pointer is a value of type pointer without memory address and size.
+
+.SS Synchronisation
+When a memory element (type and value) is shared between two memories, potentially in different processes, a concurrent access to this particular memory address is possible.
+The access to this element can be protected by a one-writer-several-readers lock.
+.P
+This synchronisation mechanism only protects the access to the memory.
+.I The value itself requires its own synchronisation for read and write access from instructions.
+
+
+.SH CODES
+The Simple Virtual Machine comes with a machine language.
+This machine language has been kept as text to be accessible to humans.
+
+.SS Comments
+Comments starts from a hash sign (#) until the end of the line, like in shell scripts:
+.nf
+-----------------    ----------
+<line> #<comment> or #<comment>
+-----------------    ----------
+.fi
+
+.SS Instructions
+Instructions are written on one line, unless a parameter is written on several lines.
+The end-of-line character marks the end of an instruction, so, two instructions can not be on the same line.
+.P
+An instruction starts with a name followed by its parameters, all separated by blank characters.
+(Please refer to the INSTRUCTION PARAMETERS section for more details.)
+The instruction name starts with a colon character (:).
+.P
+Prior to the execution of the instruction, the parameter list is tested against the instruction prototype.
+When the parameters does not comply with the prototype, a FAILURE interruption is raised.
+
+.SS Inline values
+Within the code, some values can be inserted directly in the code text.
+.TP
+.B Integers
+Constant integers are written as a sequence of digits not starting by 0, preceded by a dash for negative numbers:
+.nf
+---------------------------    ----------------------------
+<constant unsigned integer> or -<constant unsigned integer>
+---------------------------    ----------------------------
+.fi
+.IP
+The size operator on pointers also produces an integer corresponding to the number of memory addresses targeted by the pointer:
+.nf
+--------------
+SIZE <pointer>
+--------------
+.fi
+.TP
+.B Strings
+Constant strings are written as a sequence of characters monoline surrounded by double-quotes ("):
+.nf
+-----------------
+"<monoline text>"
+-----------------
+.fi
+Within the text, some character escaping is allowed:
+.nf
++--------+-------------------------------------+
+| Escape | Meaning                             |
++--------+-------------------------------------+
+| \(rsn     | End of line                         |
+| \(rst     | Tabulation                          |
+| \(rsr     | Backspace                           |
+| \(rs\(rs     | Back-slash                          |
+| \(rs"     | Double quote                        |
+| \(rs0xx   | ASCII character xx (in hexadecimal) |
++--------+-------------------------------------+
+.fi
+.IP
+Another syntax is allowed for multiline strings.
+Such strings are surrounded by three double-quotes ("""):
+.nf
+-------------
+"""<multiline
+text>"""
+-------------
+.fi
+.I Character escaping is not allowed in multiline strings.
+.TP
+.B Booleans
+Constant booleans have only two values:
+.nf
+----    -----
+TRUE or FALSE
+----    -----
+.fi
+.IP
+Booleans can be extracted from conditions:
+.nf
+-------------
+? <condition>
+-------------
+.fi
+.TP
+.B Memory addresses
+Constant memory addresses start by an ampersand (&) followed by an unsigned integer:
+.nf
+----------------------------
+&<constant unsigned integer>
+----------------------------
+.fi
+.IP
+Memory addresses can be extracted from pointers:
+.nf
+----------    -------------------------
+&<pointer> or ( <pointer> / <integer> )
+----------    -------------------------
+.fi
+The first syntax retrieves the memory address contained in the pointer.
+The second syntax computes the address within the pointer using the integer as an index starting from 0.
+If the resulting address is outside the pointer, a MEMORY interruption is raised.
+.IP
+Memory addresses can be computed from other memory addresses:
+.nf
+--------------------------------    --------------------------------
+( <memory address> + <integer> ) or ( <memory address> - <integer> )
+--------------------------------    --------------------------------
+.fi
+These syntax shift the memory address by the integer.
+When the integer is positive, the first syntax increases the address and the second one decreases it.
+No boundary checking is performed if the memory address is extracted from a pointer.
+.TP
+.B Pointers
+Pointers can be written with a memory address, a star character (*) and an integer for the size:
+.nf
+----------------------------
+<memory address> * <integer>
+----------------------------
+.fi
+.IP
+Aliases can be used as pointers:
+.nf
+------------
+<identifier>
+------------
+.fi
+.IP
+The current memory pointer register can be retrieved with this keyword:
+.nf
+-
+P
+-
+.fi
+.TP
+.B Symbols
+When a symbol exists in a library, it can be written:
+.nf
+-------------------------
+$( <library> / <string> )
+-------------------------
+.fi
+.IP
+When the first instruction of a library shall be targeted, it can be written:
+.nf
+----------------
+$( <library> / )
+----------------
+.fi
+.IP
+When a symbol exists in the current code, it can be written:
+.nf
+---------
+$<string>
+---------
+.fi
+.IP
+A library can not be written as a constant in the code, and shall be returned by an instruction.
+(Please refer to the INSTRUCTION SET section for more details.)
+.IP
+.I When the symbol does not exist in the targeted library, the symbol object can not be constructed and a FAILURE interruption is raised.
+.TP
+.B Plugin entry points
+Plugin entry points can be written by a first identifier in lower case as a plugin name, followed by a dot (.) and followed by a second identifier in lower case as a plugin object name:
+.nf
+---------------------------
+<identifier> . <identifier>
+---------------------------
+.fi
+.TP
+.B Interruptions
+Built-in interruptions can be written with they own keyword:
+.nf
+-------    ---------    ------    --------    ---------    -------    ------    -----    -----    ------    --------    -------
+FAILURE or PROCESSOR or MEMORY or SECURITY or TERMINATE or NUMERIC or DEVICE or CLONE or FIRST or SECOND or TERMINAL or GENERIC
+-------    ---------    ------    --------    ---------    -------    ------    -----    -----    ------    --------    -------
+.fi
+.IP
+Plugin interruptions can be written with an exclamation mark followed by a plugin entry point:
+.nf
+---------------------
+!<plugin entry point>
+---------------------
+.fi
+.TP
+.B Plugin defined types
+When supported, plugin defined types can accept constant values in the code:
+.nf
+-----------------------------------------------------
+CONST <constant plugin entry point> <constant string>
+-----------------------------------------------------
+.fi
+where the plugin entry point shall correspond to a type defined by a plugin, and the string contains a textual representation of the value.
+.IP
+To be usable in the Simple Virtual Machine code, the type shall support the copy operation, as the constant will be copied each time the instruction containing the constant as parameter is executed.
+
+.SS Conditions
+Conditions are special clauses added after flow control instructions to execute them only if some requirement is met:
+.nf
+-------------------------------    ---------------------------------
+<instruction> :when <condition> or <instruction> :unless <condition>
+-------------------------------    ---------------------------------
+.fi
+The first form executes the instruction if the condition is true, and the second one executes the instruction if the condition is false.
+.P
+Except memory addresses and types, all values can be read from the memory in conditions.
+.TP
+.B Boolean condition
+The syntax is:
+.nf
+--------------
+<boolean> TRUE
+--------------
+.fi
+This condition is true only when the boolean is true,
+.TP
+.B Defined memory address
+The syntax is:
+.nf
+------------------------
+<memory address> DEFINED
+------------------------
+.fi
+This condition is true only when the memory address is defined.
+.IP
+A subsequent write to this address in memory will succeed if types are compatibles,
+.TP
+.B Initialised memory address
+The syntax is:
+.nf
+----------------------------
+<memory address> INITIALISED
+----------------------------
+.fi
+This condition is true only when the memory address is initialised.
+.IP
+A subsequent read or write to this address in memory will succeed if types are compatibles,
+.TP
+.B Type check
+The syntax is:
+.nf
+--------------------------
+<memory address> IS <type>
+--------------------------
+.fi
+This condition is true only when the address is defined and has the specified type.
+.IP
+A subsequent read to a non null value or write to this address in memory will succeed.
+.TP
+.B Valid pointer index check
+The syntax is:
+.nf
+----------------------
+<integer> IN <pointer>
+----------------------
+.fi
+This condition is true only when the integer is a valid index for the pointer.
+.IP
+It means the address ( <pointer> / <index> ) is well-formed and will not raise an interruption,
+.IP
+.I This condition can also be used as loop condition:
+.nf
+===================================
+  :memory INT/index
+  0 -> &index
+:label loop
+  :shift &index
+  :goto loop :when @&index IN &0*10
+===================================
+.TP
+.B Address part of pointer check
+The syntax is:
+.nf
+-----------------------------
+<memory address> IN <pointer>
+-----------------------------
+.fi
+This condition is true only when the address is within the memory block represented by the pointer.
+.IP
+.I This condition can also be used as loop condition.
+.TP
+.B Valid symbol check
+The syntax is:
+.nf
+-----------------
+<symbol> CALLABLE
+-----------------
+.fi
+This condition is true when the symbol can be constructed and represents a valid instruction address.
+.TP
+.B Flag check
+The syntax is:
+.nf
+---------------
+<string> RAISED
+---------------
+.fi
+This condition is true when the flag given as a string is raised in the processor state.
+.TP
+.B Debugger presence check
+The syntax is:
+.nf
+-----
+DEBUG
+-----
+.fi
+This condition is true when the debugger has been activated using the -d option on a virtual machine built with the debugger feature.
+
+.SS Functions
+Functions are portions of code starting usually by a label or symbol instruction, and terminating usually by a return instruction.
+To start the execution of a function, the call instruction can be used.
+.P
+The portion of code within a function can be executed like any code with some differences:
+.TP
+.B Parameters
+The call instruction sets the current memory pointer to the parameters of the function, available through the P keyword returning the current memory pointer.
+The pointed memory zone is used to access to function parameters from the caller.
+It is also used to write returned values to the caller.
+.IP
+It can also be used to store local data.
+To avoid to expose all local variables to the caller, it is recommended to add one extra pointer (type PTR) to the function parameters.
+Then, allocate local memory in the function body and store the location of this local memory into this extra pointer.
+.IP
+The organisation of the parameters memory zone is free and all function callers shall respect the usage of this memory zone done by the function code.
+.TP
+.B Memory
+By default, all memory allocations done within a function context will be freed at the end of the function.
+All aliases part of these allocations are also deleted.
+.TP
+.B Interruptions
+All local interruption handlers and local cascaded interruption handlers will be lifted at the end of the function.
+
+.SS Jumps and function calls targets
+Jumps and function calls targets are locations in the code reachable from others instructions.
+.P
+Some locations are private to a specific code: They are named labels.
+Other locations are public and can be accessible from other codes: They are named symbols.
+.TP
+.B Local static
+When a jump or function call instruction use an identifier in lower case as a target, the jump is local to a label or a local symbol.
+The destination of the jump is computed during the link phase of the code, prior to its execution and can not be modified during the code execution.
+.TP
+.B Local dynamic
+When a jump or function call instruction use a string as a target, the jump is local to a label or a local symbol.
+The destination of the jump is computed during the execution of the jump or function call instruction.
+The string can be computed and read from the memory to perform the jump dynamicaly.
+.TP
+.B Global
+When a jump or function call instruction use a symbol as a target, the jump is global and can reach any symbol, even on another code.
+The symbol can be computed and read from the memory to perform the jump dynamicaly.
+
+.SH INSTRUCTION PARAMETERS
+Instructions can accept various parameters.
+.P
+Their prototype is fixed for built-in instructions.
+(Please refer to the INSTRUCTION SET section for more details.)
+.P
+Their prototype conforms to a certain parameter regular expression for plugin instructions.
+(Please refer to the PLUGIN OBJECT INSTRUCTIONS section for more details.)
+.P
+Memory addresses and labels can not be passed as parameters.
+
+.SS Values
+.TP
+.B Inline values
+Inline values are allowed as instruction parameters.
+(Please refer to the CODES section for more details.)
+.IP
+.I When a variable part of an inlined value is not specified as constant, this part can be replaced by a read into memory.
+(Please refer to the CODES section for more details.)
+.TP
+.B Values from memory
+Values can also be retrieved from the memory with this syntax:
+.nf
+-----------------
+@<memory address>
+-----------------
+.fi
+
+.SS Markers
+To enhance the readability of instructions, some specific constant markers can be used:
+.nf
+-    -    --    --    --    --    -    --    -    -    -    -
+< or > or << or >> or <= or => or = or <> or { or } or , or ;
+-    -    --    --    --    --    -    --    -    -    -    -
+.fi
+
+.SS Keywords
+Keywords are named flags accepted as parameters.
+They are identifiers written in capital letters, without any quote characters.
+
+
+.SH INSTRUCTION RETURN VALUES
+Some instructions can return one value.
+Instruction can return only values, no marker nor keyword can be returned by an instruction.
+.P
+This value can be written into the memory.
+If a null value is written into the memory, the corresponding address becomes uninitialised.
+.I If the type of the return value mismatches the type at the address it should be written, the returned value is lost and the memory is left untouched.
+
+
+.SH INSTRUCTION SET
+
+.SS "-> (write to memory)"
+.TP
+.B Description
+This instruction writes values to memory.
+The instruction accepts three forms:
+.RS 7
+.TP
+.B Value
+This form writes a single evaluated value into the memory.
+.IP
+The syntax is:
+.nf
+--------------------
+<value> -> <address>
+--------------------
+.fi
+.TP
+.B Atomic pointer initialisation
+This form writes all the values at the pointer addresses into the memory.
+The allocation is atomic: If an interruption is raised during values evaluation or size and type checking, no value is written into the memory.
+.IP
+This syntax also accepts a missing value in the array: The corresponding address will be uninitialised after the allocation.
+.IP
+The syntax is:
+.nf
+---------------------------------------------------------
+[ <value 1> , <value 2> , ...  , <value N> ] -> <pointer>
+---------------------------------------------------------
+.fi
+where the squared brackets are part of the syntax here and do not specify an optional parameter.
+.TP
+.B Instruction result storage
+This form executes an instruction and writes the returned value into the memory.
+The returned value is lost if the inner instruction is called outside this instruction, or if the instruction is successful but the returned value can not be written into the memory.
+.IP
+The syntax is:
+.nf
+--------------------------
+<instruction> -> <address>
+--------------------------
+.fi
+(Please refer to the INSTRUCTION RETURN VALUES section for more details.)
+.IP
+When the type of the returned value is a plugin defined type, no copy of the value is done.
+This instruction will succeed even when the type does not define a copy operation.
+.RE
+.TP
+.B Interruptions
+The -> instruction raises a MEMORY interruption when values and address have incompatible sizes or types, or when the address is not defined.
+.TP
+.B Examples
+.nf
+====================================
+3 -> &integer
+"string" -> (pointer/@&integer)
+[ 3 , "string" , , TRUE ] -> pointer
+[ ] -> &pointer*1
+:plugin.instruction 3 -> (P/0)
+====================================
+.fi
+
+.SS ":label"
+.TP
+.B Description
+A label marks a position in the code reacheable as target for a jump or a function call.
+A label is accessible only to local jumps, initiated only from the same Simple Virtual Machine code.
+.IP
+A compilation error will be raised when a label is defined twice in a code.
+A compilation error will also be raised when a symbol also exists with the same name in a code.
+.IP
+The syntax is:
+.nf
+--------------
+:label <label>
+--------------
+.fi
+where the label is an identifier in lower case.
+.TP
+.B Interruptions
+A label is not an instruction but only a code position, and can not raise any interruption.
+.TP
+.B Examples
+.nf
+===========
+:label loop
+===========
+.fi
+
+.SS ":symbol"
+.TP
+.B Description
+A symbol marks a position in the code reacheable as target for a jump or a function call.
+A symbol is accessible to local and global jumps, initiated from any Simple Virtual Machine code.
+.IP
+A compilation error will be raised when a symbol is defined twice in a code.
+A compilation error will also be raised when a label also exists with the same name in a code.
+.IP
+The syntax is:
+.nf
+----------------
+:symbol <symbol>
+----------------
+.fi
+where the symbol is an identifier in lower case.
+.TP
+.B Interruptions
+A symbol is not an instruction but only a code position, and can not raise any interruption.
+.TP
+.B Examples
+.nf
+================
+:symbol function
+================
+.fi
+
+.SS ":goto"
+.TP
+.B Description
+This instruction performs a jump to an instruction address.
+.IP
+This instruction changes the next instruction register in the current processor state.
+.IP
+This instruction can be associated to a condition clause.
+.IP
+The syntax is:
+.nf
+--------------
+:goto <target>
+--------------
+.fi
+where the target can be an identifier in lower case or a string (for a local call) or a symbol (for a global call).
+The target can also be a string or a symbol read from the memory.
+.TP
+.B Interruptions
+The instruction raises a FAILURE interruption when the target is invalid.
+.TP
+.B Examples
+.nf
+======================================
+:goto label
+:goto label :when @&condition TRUE
+:goto label :when @&index IN pointer
+:goto label :when &address INITIALISED
+:goto "label"
+:goto $"symbol"
+:goto $@&symbol
+:goto @&label_or_symbol
+:goto $(@&lib/"function")
+======================================
+.fi
+
+.SS ":call"
+.TP
+.B Description
+This instruction performs a function call.
+A function is an instruction address supporting to be executed in a different processor state.
+.IP
+This instruction stores the current processor state on the return stack, and initiates a new state with the two arguments as next instruction register and current memory pointer register.
+.IP
+This instruction can be associated to a condition clause.
+.IP
+The syntax is:
+.nf
+------------------------
+:call <target> <pointer>
+------------------------
+.fi
+where the target can be an identifier in lower case or a string (for a local call) or a symbol (for a global call).
+The target can also be a string or a symbol read from the memory.
+The pointer indicates where the function parameters are located.
+.TP
+.B Interruptions
+The instruction raises a FAILURE interruption when the target is invalid.
+.TP
+.B Examples
+.nf
+=============================================
+:call label parameters
+:call label parameters :when @&condition TRUE
+:call "label" &0*4
+:call $"symbol" @&pointer
+:call $@&symbol (array/@&index)*1
+:call @&label_or_symbol P
+:call $(@&lib/"function") parameters
+=============================================
+.fi
+.P
+
+.SS ":return"
+.TP
+.B Description
+This instruction performs one or several function return.
+When a function return is performed, all interruption handlers within the state are reset, and all local memory allocated within the function is freed.
+.IP
+Without argument, the instruction returns once.
+.IP
+A constant unsigned integer can be passed to the instruction.
+.I This integer can not be read from the memory.
+If a positive integer is given, the instruction returns immediately the given number of functions.
+If a zero integer is given, the instruction returns functions until an associated condition clause becomes false.
+.IP
+.I The argument of this instruction is not an expression returned to the function caller, and returned values shall be written in function parameters.
+(Please refer to the CODES section for more details.)
+.IP
+This instruction can be associated to a condition clause.
+.IP
+The syntax is:
+.nf
+-------
+:return
+-------
+.fi
+or
+.nf
+-----------------------------------
+:return <constant unsigned integer>
+-----------------------------------
+.fi
+.TP
+.B Interruptions
+When a function return is done on an empty return stack, a PROCESSOR interruption is raised unless the last_return_is_shutdown flag is set on the current kernel.
+.TP
+.B Examples
+.nf
+==================================
+:return
+:return 2
+:return 2 :when @&index IN pointer
+:return 0 :unless "flag" RAISED
+:return 0 :unless @&P TRUE
+==================================
+.fi
+
+.SS ":shutdown"
+.TP
+.B Description
+This instruction can stop the processor or the whole machine.
+.IP
+When invoked without any argument, only the current processor is stopped.
+When invoked with an integer argument, the machine is stopped, and the machine uses the argument as return value for the operating system.
+.IP
+.I The form stopping the machine is flagged system and can not be executed in protected mode.
+.IP
+This instruction can be associated to a condition clause.
+.IP
+The syntax is:
+.nf
+---------
+:shutdown
+---------
+.fi
+or
+.nf
+-----------------------
+:shutdown <return code>
+-----------------------
+.fi
+where the return code is an integer or can be read from the memory.
+.TP
+.B Interruptions
+The form stopping the machine raises a PROCESSOR interruption when the argument is a negative number, and a SECURITY interruption when called in a protected kernel.
+.TP
+.B Examples
+.nf
+======================================================
+:shutdown
+:shutdown :when @&terminate TRUE
+:shutdown 0
+:shutdown 1
+:shutdown @&return_code
+:shutdown @&return_code :when &return_code INITIALISED
+======================================================
+.fi
+
+.SS ":interruption"
+.TP
+.B Description
+This instruction manages handlers for an interruption.
+The handler can be set, updated or reset in the processor state (local interruption handler) or in the processor (global interruption handler).
+.IP
+Local interruption handlers are defined only for the current function and will be available during sub-functions calls when cascaded.
+They will be automatically reset at the end of the function.
+.IP
+Global interruption handlers are defined until the end of the current kernel execution.
+When a global interruption handler is set, it will be triggered on hardware interruption reception by the machine.
+.IP
+If an interruption triggers an interruption handler, this handler is invoked as a function call with the current memory pointer left unchanged.
+.IP
+.I In protected mode, an handler associated to the SECURITY interruption will be ignored when the kernel is interrupted for security reason.
+.IP
+The syntax is:
+.nf
+----------------------------------------------------------
+:interruption [ GLOBAL | CASCADE ] <interruption> <target>
+----------------------------------------------------------
+.fi
+to set or update the handler or
+.nf
+-------------------------------------------------
+:interruption [ GLOBAL | CASCADE ] <interruption>
+-------------------------------------------------
+.fi
+to reset the handler.
+.IP
+The interruption can be a constant interruption or a read from the memory, and the target is equivalent to a function call target.
+.IP
+No keyword sets or resets a local interruption handler.
+The CASCADE keyword sets or resets a cascaded local interruption handler.
+The GLOBAL keyword sets or resets a global interruption handler.
+.TP
+.B Interruptions
+The instruction raises itself a FAILURE interruption if the target is not valid.
+.TP
+.B Examples
+.nf
+====================================================
+:interruption FAILURE ignore
+:interruption CASCADE FAILURE ignore
+:interruption GLOBAL TERMINATE close_program
+:interruption !plugin.interruption
+:interruption @&interruption $(@&lib/"interruption")
+====================================================
+.fi
+
+.SS ":memory"
+.TP
+.B Description
+This instruction allocates memory using a zone description.
+This description is made of the sequence of types with optional repetitions and aliases.
+All allocated addresses are contiguous, and the pointer corresponding to this zone is returned by the instruction.
+.IP
+The syntax is:
+.nf
+-------------------------------------
+:memory [ GLOBAL ] <zone description>
+-------------------------------------
+.fi
+.IP
+By default, the instruction allocates memory local to the current function.
+When the GLOBAL keyword is specified, the allocated memory is global and will not be freed at function return time.
+.IP
+The description of the zone can be divided into sub-parts written:
+.nf
+---------------    -------------------------
+<type sequence> or <type sequence> / <alias>
+---------------    -------------------------
+.fi
+separated by commas.
+The alias is an identifier in lower case, and will be associated to the sub-part to the allocated zone.
+.IP
+Type sequences can be written:
+.nf
+--------------    ---------------------------------------------
+<type element> or ( <type element 1> , ... , <type element N> )
+--------------    ---------------------------------------------
+.fi
+.IP
+A type element can be written:
+.nf
+------    ---------------------    ------------------------------------------------------------
+<type> or <type> * <repetition> or ( <type element 1> , ... , <type element N> ) * <repetition>
+------    ---------------------    ------------------------------------------------------------
+.fi
+where the repetition is a positive integer or an integer read from memory.
+The type can be a built-in one among AUTO INT STR BLN PTR LIB SYM IRQ PEP or a plugin entry point for plugin defined types.
+This plugin entry point can be read from the memory.
+.TP
+.B Interruptions
+This instruction raises a MEMORY interruption if a plugin entry point does not correspond to a plugin defined type, and a FAILURE interruption if a repetition is a negative integer.
+.TP
+.B Examples
+.nf
+=====================================================
+:memory PTR, (INT, STR)/intermediate, PEP -> &pointer
+:memory INT*@&size/array, (AUTO, INT, STR)/object
+:memory com.device, STR -> &@&pointer
+:memory AUTO*SIZE pointer/buffer
+:memory GLOBAL (PTR, STR*2)*5 -> (P/0)
+=====================================================
+.fi
+
+.SS ":local"
+.TP
+.B Description
+This instruction transforms a global memory zone into a local one.
+The corresponding zone will be freed at the end of the current function.
+.IP
+If the keyword CASCADE is present, then all memory accessible from the pointer by following recursively pointers in the zone will be transformed into local memory.
+.IP
+The syntax is:
+.nf
+----------------------------
+:local [ CASCADE ] <pointer>
+----------------------------
+.fi
+where the pointer is the memory zone to transform.
+This pointer can be read from the memory.
+.TP
+.B Interruptions
+This instruction raises a MEMORY interruption when the pointer indicates at least one non-defined address.
+.TP
+.B Examples
+.nf
+======================
+:local &2*3
+:local CASCADE @&(P/2)
+======================
+.fi
+
+.SS ":shift"
+.TP
+.B Description
+This instruction increases or decreases an integer stored at a given address in the memory.
+.IP
+It can be used to iterate over pointers using an integer index.
+.IP
+The syntax is:
+.nf
+------------------------
+:shift <delta> <address>
+------------------------
+.fi
+or
+.nf
+----------------
+:shift <address>
+----------------
+.fi
+where the delta is an integer and can be read from memory.
+The delta can be omitted when equal to one.
+.TP
+.B Interruptions
+The instruction raises a MEMORY interruption when the address does not contain an integer.
+.TP
+.B Examples
+.nf
+====================
+:shift &integer
+:shift -2 &0
+:shift @&delta (P/2)
+====================
+.fi
+
+.SS ":library"
+.TP
+.B Description
+This instruction compiles a Simple Virtual Machine source code and returns a library.
+.IP
+All symbols of the code can be built from this returned value.
+.IP
+The syntax is:
+.nf
+-----------------------------
+:library <name> <source code>
+-----------------------------
+.fi
+where both arguments are strings and can be read from memory.
+.TP
+.B Interruptions
+If the source code is invalid, a FAILURE interruption is raised.
+.TP
+.B Examples
+.nf
+==============================================
+:memory LIB/lib
+:library "lib" """
+	:symbol function
+		:memory @(P/0)*@(P/1) -> (P/2)
+		:return
+	""" -> &lib
+:call $(@&lib/"function") parameters
+==============================================
+.fi
+
+.SS ":flag"
+.TP
+.B Description
+This instruction raises flags in the processor state.
+.IP
+A flag can be raised severals times, and can not be lowered.
+A flag state can be checked with the RAISED condition.
+.IP
+The syntax is:
+.nf
+------------------------
+:flag [ CASCADE ] <flag>
+------------------------
+.fi
+Flags are given as strings, and can be read from memory.
+.IP
+When the keyword CASCADE is present, the flag is transmitted to inner functions calls.
+.TP
+.B Interruptions
+This instruction raises no interruption.
+.TP
+.B Examples
+.nf
+============================
+:flag "flag"
+:flag CASCADE "another flag"
+:flag @&flag
+============================
+.fi
+
+.SS ":debug"
+.TP
+.B Description
+This instruction interacts with the debugger.
+.IP
+The instruction is ignored when the debugger is not active.
+.IP
+The syntax is:
+.nf
+-----------------------
+:debug BREAK [ <name> ]
+-----------------------
+.fi
+This form is an immediate break point in the code.
+The optional name given as string will be displayed in the debugger user interface.
+.IP
+.nf
+------------------------------------------------------------------
+:debug ( ADD | REMOVE ) ( READ | WRITE | ACCESS | FREE ) <address>
+------------------------------------------------------------------
+.fi
+This form sets or resets a break point on the memory:
+.nf
++--------+--------------------------------------------------------------------------------------------------------+
+| Type   | Meaning                                                                                                |
++--------+--------------------------------------------------------------------------------------------------------+
+| READ   | The code execution stops when a read is performed on the memory address                                |
+| WRITE  | The code execution stops when a write is performed on the memory address                               |
+| ACCESS | The code execution stops when a potential change is performed on the value stored at the memory adress |
+| FREE   | The code execution stops when the memory address is freed                                              |
++--------+--------------------------------------------------------------------------------------------------------+
+.fi
+An ACCESS type of break point can be triggered on mutable values passed to plugin instructions, or involved values having a plugin defined type.
+The shift built-in instruction should trigger a break point on an ACCESS type, but uses the WRITE type instead for convenience.
+.IP
+.nf
+------------------------    ----------------------
+:debug EXPLAIN <address> or :debug EXPLAIN <value>
+------------------------    ----------------------
+.fi
+This form is an immediate break point in the code.
+In the break point message, a complete explanation on how the address or the value is computed is displayed.
+.IP
+.nf
+--------------------------------------
+:debug ( ADD | REMOVE ) <interruption>
+--------------------------------------
+.fi
+This form sets or resets a break point on a raised interruption.
+The break point is activated regardless the defined interruption handlers and is triggered before any handler call.
+.TP
+.B Interruptions
+This instruction raises no interruption.
+.TP
+.B Examples
+.nf
+=========================
+:debug BREAK
+:debug BREAK "start"
+:debug BREAK @&str
+
+:debug ADD READ (P/1)
+:debug ADD ACCESS (P/2)
+:debug REMOVE READ (P/1)
+
+:debug EXPLAIN (@&p/@&i)
+:debug EXPLAIN ? @&i IN P
+:debug EXPLAIN $(@&l/"f")
+
+:debug ADD MEMORY
+:debug ADD !plugin.irq
+:debug REMOVE FAILURE
+=========================
+.fi
+
+.SS Plugin defined instructions
+.TP
+.B Description
+Plugin defined instructions are a complete class of instructions.
+The aim of these instructions is to extend the capabilities of the virtual machine by calling C/C++ functions defined in plugins.
+.IP
+The instruction name is a plugin entry point, and can be read from the memory.
+In such case, the instruction is automatically set as waiting and system.
+.IP
+Parameters can be values, markers and keywords.
+When a value is passed to a plugin instruction, it is passed as a reference and can be modified by the instruction if it is retrieved from the memory.
+A plugin instruction can also return a value.
+If a null value is returned and the instruction was the left part of a write to memory instruction, the address in memory is set as non-initialised.
+.IP
+The syntax is:
+.nf
+-----------------------------------------------------
+:<plugin entry point> <parameter 1> ... <parameter N>
+-----------------------------------------------------
+.fi
+where the plugin entry point has to be defined as an instruction by a plugin, and can be read from memory.
+.I When the instruction name is read from the memory, the instruction is classified WAITING SYSTEM.
+.TP
+.B Interruptions
+The interruption PROCESSOR is raised when the instruction name does not correspond to a defined instruction.
+.IP
+Other interruptions can be raised depending on the instruction plugin callback.
+.TP
+.B Examples
+.nf
+===========================================
+:plugin.instruction "value" @&value < VALUE
+:@&instruction "value" @&value < VALUE
+===========================================
+.fi
+
+
+.SH PLUGINS
+The Simple Virtual Machine alone is very limited in terms of capabilities: The infrastructure is present but barely usable and the instruction set is minimal.
+.P
+To be usable in real applications, the Simple Virtual Machine shall be extended to provide customised behaviors.
+Plugins answer this need of architecture extension.
+.P
+A Simple Virtual Machine plugin is a shared object (.so) with some specific symbols defined, linking on the Simple Virtual Machine interface library and being able to configure itself on the Simple Virtual Machine.
+
+.SS Generic handling functions
+When a plugin needs C or C++ variables initialisation and finalisation, the C function can be defined
+.nf
+*******************************************
+void plugin_initialisation(const void *svm)
+*******************************************
+.fi
+for initialisation during the boot sequence and
+.nf
+*****************************************
+void plugin_finalisation(const void *svm)
+*****************************************
+.fi
+for finalisation before exit.
+.P
+In these functions, only API functions not related to a kernel, a process or a scheduler can be called.
+.P
+The startup C function can be also defined as
+.nf
+************************************
+void plugin_startup(const void *svm)
+************************************
+.fi
+for initialisation after the boot phase, when schedulers are started.
+This allows plugins to create processes and attach them to schedulers from this function.
+
+
+.SS Configuration
+The configuration of a plugin is done by defining a C callback function:
+.nf
+***********************************
+void plugin_configure(void *plugin)
+***********************************
+.fi
+In the body of this function, a call to the API function svm_plugin_configure will declare to the Simple Virtual Machine the plugin dependencies and content using a string with a specific syntax called the plugin configuration string.
+If this call is not performed in the plugin configuration callback, the plugin is ill-formed and an error is emitted.
+.P
+The plugin configuration string has this syntax:
+.nf
+----------------------
+PLUGIN <identifier>
+[ USE
+<dependency objects> ]
+DEFINE
+<defined objects>
+----------------------
+.fi
+where the identifier in lower case is the name of the plugin, the dependency objects and defined objects are a non-empty list of objects declarations, one by line.
+Objects definition syntax is presented on each kind of objects a plugin can manage.
+(Please refer to the sections starting with PLUGIN OBJECT for more details.)
+When a plugin has no dependencies, the USE section must be removed.
+.P
+Comments starts with a hash sign (#) and ends at the end of the corresponding line, like in shell scripts.
+.P
+The dependency objects should always be written as they are used within the plugin.
+In particular, instructions and functions prototypes written in the dependency section of the plugin does not need to match exactly the prototype of the object defined by the remote plugin:
+.nf
+==============================================         ==================================================
+PLUGIN example                                         PLUGIN com
+USE                                            against DEFINE
+  WAITING INSTRUCTION com.write com.device STR           WAITING INSTRUCTION com.write com.device VALUE *
+==============================================         ==================================================
+.fi
+is a valid dependency, as the prototype in the dependencies of the plugin example is included in the prototype in the definition part of the plugin com.
+
+.SS Load into the machine
+Plugins are loaded into the Simple Virtual Machine before its boot.
+.I For security reasons, it will never be possible to load a plugin once the Simple Virtual Machine has booted.
+.P
+In one Simple Virtual Machine instance, each loaded plugin shall have a different name, and dependencies shall be respected.
+The order of load of plugins has no influence on the dependencies check.
+
+.SS Plugin callbacks
+For each defined objects, some particular symbols need to be defined in the plugin shared object.
+The C functions corresponding to these symbols are called plugin callbacks.
+Some of these plugin callbacks are mandatory (the plugin load will fail when missing) and the other ones are optional (the corresponding functionality will be disabled).
+.P
+.I The name of a C function has to match with the name described in the Simple Virtual Machine specifications to be detected as a plugin callback.
+.I The full prototype of all plugin callbacks shall respect the Simple Virtual Machine specifications.
+(Please refer to the sections starting with PLUGIN OBJECT for more details.)
+.P
+They are called when the operation corresponding to the plugin callback is invoked in the Simple Virtual Machine code.
+.P
+All plugin callbacks have a first parameter:
+.nf
+===============
+const void *svm
+===============
+.fi
+This opaque pointer is the execution environment of the plugin callback and shall be passed to all API functions called within the plugin callback body.
+
+.SS Official plugins
+The virtual machine is delivered with some basic plugins.
+They are open-source, delivered under the LGPL licence and can be loaded into Simple Virtual Machine private instances.
+.P
+These plugins are called official plugins.
+
+.SS Promotion
+.TP
+.B Open source plugins
+Open source plugin maintainers have no particular delivery engagement.
+As the code is accessible by clients, they can compile the plugins for their version of the Simple Virtual Machine.
+.IP
+Whenever possible, it is recommended to use the last version of the machine, and clients and maintainers can contribute to the plugin source to keep it compatible with the latest version of the machine.
+.TP
+.B Non open source plugins
+.I Plugin maintainers engage themselves to deliver a version of the plugin compatible with the last version of the Simple Virtual Machine on client request.
+Compatibility with older versions of the machine can also be negociated between clients and plugin providers, but the engagement above concerns only the last delivered version of the Simple Virtual Machine at the client request time.
+.TP
+.B Official plugins
+To become an official plugin, a plugin should be helpful to all Simple Virtual Machine users, be open source, be memory safe, be documented and have a good intent.
+.IP
+To promote a plugin as official plugin, please send your plugin with its source code and documentation to Julien Bruguier <===EMAILCONTACT===>.
+After review, the plugin can be integrated into the Simple Virtual Machine delivery.
+
+.SS Generation
+To ease the creation of plugins, a tool is associated to the machine to generate a plugin from a single description file.
+Please refer to
+.BR svm_plugin (1)
+command for plugin generation.
+
+
+.SH PLUGIN OBJECT TYPES
+Plugins can define extra types for memories.
+This allows the memories to store other kinds of data with dedicated operations on these data.
+
+.SS Configuration
+In the plugin configuration string, a type is written:
+.nf
+-------------------------
+TYPE <plugin entry point>
+-------------------------
+.fi
+where the second identifier of the plugin entry point is the type name.
+
+.SS Plugin callbacks
+.TP
+.B Destruction
+This mandatory plugin callback is called when a value of the plugin type is destroyed.
+.IP
+The prototype of this plugin callback is:
+.nf
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+void type_<type name>_delete(const void *svm, void *handler)
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.IP
+The implementation of this plugin callback should release all ressources held in the type and free the memory at the handler pointer.
+.TP
+.B Copy
+This optional plugin callback allows the data to be copied.
+It is called when a copy is requested.
+When this plugin callback is not defined, an interruption is raised when a copy is requested.
+.IP
+The prototype of this plugin callback is:
+.nf
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+void* type_<type name>_copy(const void *svm, const void *handler)
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.IP
+The implementation of this plugin callback should create a copy of the data, and return the pointer of the copy.
+Please note that the handler is const and should not be modified here.
+.TP
+.B Comparison
+This optional plugin callback allows the data to be compared with other values of the same type.
+It is called when a comparison is requested.
+When this plugin callback is not defined, a weak total order comparison (based on value handlers) is done instead.
+.IP
+The prototype of this plugin callback is:
+.nf
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+unsigned char type_<type name>_compare(const void *svm, const void *handler_left, const void *handler_right)
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.IP
+The implementation of this plugin callback should inspect both left and right values, and answer:
+ - if the comparison is an equivalence, either EQUIVALENCE_EQUAL or EQUIVALENCE_DIFFERENT values,
+ - if the comparison is an order, ORDER_EQUAL, ORDER_INFERIOR (when left is inferior to right), ORDER_SUPERIOR (when left is superior to right) or ORDER_UNCOMPARABLE values.
+.IP
+When the comparison is an order, it is considered as a total order by default. This can be specified by mixing ORDER_TOTAL or ORDER_PARTIAL with a boolean or (| operator) to the value.
+.IP
+When the comparison is defined through this callback, it is considered as strong by default meaning the comparison is well-defined. Otherwise, the comparison has to be considered as weak. This can be specified by mixing COMPARISON_STRONG or COMPARISON_WEAK with a boolean or (| operator) to the value.
+.IP
+Please note that the handlers are const and should not be modified here.
+.TP
+.B Constant construction
+This optional plugin callback allows the data to be created as a constant in the code from a string.
+It is called when a constant construction is present in the code.
+When this plugin callback is not defined, a compilation error is emitted when a constant construction is requested.
+.IP
+The prototype of this plugin callback is:
+.nf
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+void* type_<type name>_constant(const void *svm, const SVM_String value)
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.IP
+The implementation of this plugin callback should parse the content of the value as string a build a data on the heap and return its pointer.
+.TP
+.B String conversion
+This optional plugin callback allows the data to be transformed as a string for display.
+It is called when a textual representation of the data is requested.
+When this plugin callback is not defined, a default and ugly textual representation is produced.
+.IP
+The prototype of this plugin callback is:
+.nf
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+SVM_String type_<type name>_print(const void *svm, const void *handler)
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.IP
+The implementation of this plugin callback should build a text representing the data.
+When the constant construction plugin callback is also defined, it is recommended to produce a text the constant constant plugin callback can use to produce the same data.
+The returned string shall be created using the API function svm_string_new or its alternatives.
+
+.SS Usage
+Plugin types can be specified in the Simple Virtual Machine code by using the plugin entry point in a place where a type is requested.
+.P
+Data of plugin types can be created within plugin callbacks by allocating the data on the heap and pass its pointer to the API function svm_value_plugin_new.
+(Please refer to the SIMPLE VIRTUAL MACHINE INTERFACE (API) section for more details.)
+
+
+.SH PLUGIN OBJECT INSTRUCTIONS
+Plugins can define extra instructions for processors.
+This allows the processors to run other instructions with potentially complex behaviors.
+.P
+Values returned by instructions are moved to the memory whenever possible, to avoid a copy.
+In particular, this is useful on plugin defined types having no copy operation defined.
+
+.SS Configuration
+In the plugin configuration string, an instruction is written:
+.nf
+-----------------------------------------------------------------------------------------------
+[ WAITING ] [ SYSTEM ] [OVERRIDE] INSTRUCTION <plugin entry point> <parameters> [ -> <return> ]
+-----------------------------------------------------------------------------------------------
+.fi
+where the second identifier of the plugin entry point is the instruction name.
+.TP
+.B Flags
+The flag WAITING specifies the instruction can take a long time to execute or can wait for events.
+Such instructions may degrade scheduling and Simple Virtual Machine responsiveness to signals and should be used with caution.
+In some instruction implementations, the scheduler can be notified when the instruction pauses and resumes its execution.
+The scheduler can then run another process during the instruction pause.
+.IP
+The flag SYSTEM specifies the instruction has an impact on the whole Simple Virtual Machine or on the underlying operating system and shall not executed in protected mode.
+(Please refer to the KERNELS section for more details.)
+.IP
+The flag OVERRIDE specifies the instruction can be used only by an instruction override.
+Any execution attempt outside an override will raise a PROCESSOR interruption when the instruction has this flag.
+.TP
+.B Parameters
+The Simple Virtual Machine prototype accepts a regular expression of parameters.
+.IP
+A regular expression element can be an atom, a sequence, an atom alternative, a sequence alternative or a repetition.
+.IP
+Atoms of the regular expression can be:
+.nf
++-------------+------------------------------+
+| Syntax      | Accepted parameter           |
++-------------+------------------------------+
+| <type>      | A data of the specified type |
+| <marker>    | This marker                  |
+| '<keyword>' | This keyword                 |
+| VALUE       | Any value                    |
+| MARKER      | Any marker                   |
+| KEYWORD     | Any keyword                  |
+| .           | Anything                     |
++-------------+------------------------------+
+.fi
+Keywords are specified in the regular expression by an identifier in capital letters surrounded by simple quotes (').
+.IP
+Sequences are simply written by juxtaposing regular expression elements separated by blank characters:
+.nf
+---------------------------------------
+<element 1> <element 2> ... <element N>
+---------------------------------------
+.fi
+.IP
+Atomic alternatives are written by a sequence of atoms separated by blank characters and surrounded by square brackets:
+.nf
+----------------------------------
+[ <atom 1> <atom 2> ... <atom N> ]
+----------------------------------
+.fi
+where the squared brackets are part of the syntax here and do not specify an optional parameter.
+The negation of this alternative is not supported.
+.IP
+Sequence alternatives are written by a sequence of sequences of elements separated by a pipe character (|) and surrounded by parenthesis (() and ()):
+.nf
+----------------------------------------------------------------------------
+( <element sequence 1> | <element sequence 2> | ... | <element sequence N> )
+----------------------------------------------------------------------------
+.fi
+where the pipe character is part of the syntax here and do not specify an alternative in the syntax.
+.IP
+Repetitions are written:
+.nf
++------------------------------+--------------------------------------------+
+| Syntax                       | Meaning                                    |
++------------------------------+--------------------------------------------+
+| <element> ?                  | Optional element (0 or 1)                  |
+| <element> *                  | Optional multiple element (0 to infinite)  |
+| <element> +                  | Mandatory multiple element (1 to infinite) |
+| <element> <constant integer> | Exact number of occurences                 |
++------------------------------+--------------------------------------------+
+.fi
+.IP
+Each element can be suffixed by a colon (:) and a lower case identifier used as documentation:
+.nf
+------------------------
+<element> : <identifier>
+------------------------
+.fi
+.TP
+.B Return
+A return part of the prototype of an instruction is a limited regular expression.
+Only one atom, one atom alternative or an optional element repetition is allowed.
+.IP
+.I When the optional element repetition is used, it means the instruction can return a null value.
+.IP
+Elements can also suffixed by a lower case identifier for documentation.
+
+.SS Plugin callbacks
+The mandatory plugin callback associated to the instruction is the core of the plugin instruction.
+It is called when the instruction is invoked from the Simple Virtual Machine code with a list of parameters compliant with the regular expression of parameters.
+.P
+The prototype of this plugin callback is:
+.nf
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+SVM_Value instruction_<instruction name>(const void *svm, const SVM_Size argc, const SVM_Parameter argv[])
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.P
+The implementation of this plugin callback depends on the goal of the instruction.
+In the plugin callback body, any access to a value of argv out of the range from 0 to argc-1 is invalid.
+.P
+When the instruction has no return, the plugin callback shall return a null pointer.
+A valid value shall be returned otherwise.
+
+.SS Usage
+Plugin instructions are specified in the Simple Virtual Machine code by putting the plugin entry point as instruction name prefixed by a colon (:), and followed by the parameter list.
+
+.SS Note
+A plugin instruction can not be called from any plugin callback.
+Only plugin object functions can be called from any plugin callback using the Simple Virtual Machine API.
+.P
+However, when a code of a plugin has to be called either from the Simple Virtual Machine code or from any plugin callback, this plugin can provide both instruction and function with the same name and prototype.
+To avoid code duplication, both objects can call a common C/C++ function in the plugin, or one object can call the plugin callback of the other object: Calling a plugin callback like a C/C++ function is valid from the same plugin.
+.P
+In this example, the code is written in a plugin instruction and the function performs a call to the instruction implementation:
+.nf
+==================================================
+PLUGIN example
+
+DEFINE
+
+INSTRUCTION example.example INT -> INT
+%{
+        auto i = ARGV_VALUE(0,integer);
+        return NEW_VALUE(integer,i+1);
+%}
+
+FUNCTION example.example INT -> INT
+%{
+        return instruction_example(svm,argc,argv);
+%}
+==================================================
+.fi
+Please refer to manpage
+.BR svm_plugin (1)
+for plugin definition file syntax.
+
+
+.SH PLUGIN OBJECT INTERRUPTIONS
+Plugins can define extra software interruptions for processors.
+(Please refer to the SOFTWARE INTERRUPTIONS section for more details.)
+These customised interruptions can be used to distinguish specific errors from plugin instructions, or custom events.
+
+.SS Configuration
+In the plugin configuration string, an interruption is written:
+.nf
+---------------------------------
+INTERRUPTION <plugin entry point>
+---------------------------------
+.fi
+where the second identifier of the plugin entry point is the interruption name.
+
+.SS Plugin callbacks
+No plugin callback need to be defined for this plugin object.
+
+.SS Usage
+Plugin interruptions can be used like any other software interruptions.
+Such interruptions are always raised from plugin callbacks.
+
+
+.SH PLUGIN OBJECT SEQUENCERS
+Plugins can define extra sequencers to add a policy of kernel execution.
+(Please refer to the SEQUENCERS section for more details.)
+
+.SS Configuration
+In the plugin configuration string, a sequencer is written:
+.nf
+------------------------------
+SEQUENCER <plugin entry point>
+------------------------------
+.fi
+where the second identifier of the plugin entry point is the sequencer name.
+
+.SS Plugin callbacks
+.TP
+.B Creation
+This mandatory plugin callback is called when a sequencer instance is created within a process.
+.IP
+The prototype of this plugin callback is:
+.nf
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+void* sequencer_<sequencer name>_create(const void *svm)
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.IP
+The implementation of this plugin callback should create on the heap a structure and return its pointer.
+This pointer will be passed to all other plugin callbacks of this sequencer as handler.
+.IP
+When this structure is useless for the sequencer, a null pointer can be safely returned, and all other plugin callbacks of this sequencer should not use their provided handler pointer.
+.TP
+.B Destruction
+This mandatory plugin callback is called when a sequencer instance is destroyed within a process.
+.IP
+The prototype of this plugin callback is:
+.nf
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+void* sequencer_<sequencer name>_delete(const void *svm, void *handler)
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.IP
+The implementation of this plugin callback should release all resources from the structure pointed by the handler, and free the structure.
+.TP
+.B Current kernel
+This mandatory plugin callback is the core of the sequencer.
+It is called when the process needs to know which kernel should be executed in the kernel sequence.
+When this function returns a null pointer, the process ends.
+.IP
+The prototype of this plugin callback is:
+.nf
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+SVM_Kernel sequencer_<sequencer name>_current(const void *svm, void *handler)
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.IP
+The implementation of this plugin callback should return a valid kernel or a null pointer when no more kernels can be executed according to the sequencer policy.
+.TP
+.B Attach kernel
+This mandatory plugin callback is called when a new kernel is attached to the sequencer.
+.IP
+The prototype of this plugin callback is:
+.nf
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+SVM_Boolean sequencer_<sequencer name>_attach(const void *svm, void *handler, SVM_Kernel kernel, SVM_Size argc, SVM_Parameter argv[])
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.IP
+The implementation of this plugin callback should accept the kernel by returning TRUE or reject the kernel by returning FALSE depending on its policy and parameters.
+.IP
+When the sequencer accepts the kernel, it should retain it into its structure and transform the kernel variable into a global variable.
+(Please refer to the SIMPLE VIRTUAL MACHINE INTERFACE (API) section for more details.)
+.IP
+By default, the Simple Virtual Machine calls this function by passing 0 as argc and a null pointer as argv.
+.I Implementations should always detect this situation when using the parameters.
+.TP
+.B Detach kernel
+This mandatory plugin callback is called when a kernel is detached from the sequencer.
+.IP
+The prototype of this plugin callback is:
+.nf
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+SVM_Boolean sequencer_<sequencer name>_detach(const void *svm, void *handler, SVM_Kernel kernel, SVM_Size argc, SVM_Parameter argv[])
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.IP
+The implementation of this plugin callback should accept to detach the kernel by returning TRUE or reject to detach the kernel by returning FALSE depending on its policy and parameters.
+.IP
+When the sequencer accepts to detach the kernel, it should release it from its structure and transform the kernel variable into a local variable.
+(Please refer to the SIMPLE VIRTUAL MACHINE INTERFACE (API) section for more details.)
+.IP
+By default, the Simple Virtual Machine calls this function by passing 0 as argc and a null pointer as argv.
+.I Implementations should always detect this situation when using the parameters.
+.TP
+.B String conversion
+This mandatory plugin callback is called when the internal state of the sequencer shall be transformed into a textual representation for display.
+.IP
+The prototype of this plugin callback is:
+.nf
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+SVM_String sequencer_<sequencer name>_print(const void *svm, void *handler)
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.IP
+The implementation of this plugin callback should build a text representing the sequencer structure.
+The returned string shall be created using the API function svm_string_new or its alternatives.
+
+.SS Usage
+Plugin sequencers can be used like the default sequencer, during process creation.
+
+
+.SH PLUGIN OBJECT SCHEDULERS
+Plugins can define extra schedulers to add a policy of process execution.
+(Please refer to the SCHEDULERS section for more details.)
+
+.SS Configuration
+In the plugin configuration string, a scheduler is written:
+.nf
+------------------------------
+SCHEDULER <plugin entry point>
+------------------------------
+.fi
+where the second identifier of the plugin entry point is the scheduler name.
+
+.SS Plugin callbacks
+.TP
+.B Creation
+This mandatory plugin callback is called when a scheduler instance is created during boot.
+.IP
+The prototype of this plugin callback is:
+.nf
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+void* scheduler_<scheduler name>_create(const void *svm)
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.IP
+The implementation of this plugin callback should create on the heap a structure and return its pointer.
+This pointer will be passed to all other plugin callbacks of this scheduler as handler.
+.IP
+When this structure is useless for the scheduler, a null pointer can be safely returned, and all other plugin callbacks of this scheduler should not use their handler pointer.
+.TP
+.B Destruction
+This mandatory plugin callback is called when a scheduler instance is destroyed at exit time.
+.IP
+The prototype of this plugin callback is:
+.nf
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+void* scheduler_<scheduler name>_delete(const void *svm, void *handler)
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.IP
+The implementation of this plugin callback should release all resources from the structure pointed by the handler, and free the structure.
+.TP
+.B Schedule
+This mandatory plugin callback is the core of the scheduler.
+It is called when a process attached to the scheduler changes its state.
+.IP
+The prototype of this plugin callback is:
+.nf
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+unsigned long int scheduler_<scheduler name>_schedule(const void *svm, void *handler, SVM_Process process, const SVM_Process_State state)
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.IP
+The implementation of this plugin callback should return 0 or a timer duration in milliseconds.
+Depending on its policy and its internal structure, processes can be runned, suspended or terminated.
+.TP
+.B Notification
+This optional plugin callback is also part of the core of the scheduler when defined.
+It is called when the scheduler timer expires or when a notification is sent to the scheduler.
+.IP
+The prototype of this plugin callback is:
+.nf
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+unsigned long int scheduler_<scheduler name>_notification(const void *svm, void *handler, const SVM_Notification_Type type, const unsigned long int parameter)
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.IP
+The implementation of this plugin callback depends on the scheduler policy: it can use only the timer part, or only the notification part, or both.
+.TP
+.B Attach process
+This mandatory plugin callback is called when a new process is attached to the scheduler.
+.IP
+The prototype of this plugin callback is:
+.nf
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+SVM_Boolean scheduler_<scheduler name>_attach(const void *svm, void *handler, SVM_Process process, const unsigned long int parameter)
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.IP
+The implementation of this plugin callback should accept the process by returning TRUE or reject the process by returning FALSE depending on its policy and the parameter.
+.IP
+When the scheduler accepts the process, it should retain it into its structure and transform the process variable into a global variable.
+(Please refer to the SIMPLE VIRTUAL MACHINE INTERFACE (API) section for more details.)
+.IP
+By default, the Simple Virtual Machine calls this function by passing 0 as parameter.
+.TP
+.B Detach process
+This mandatory plugin callback is called when a process is detached from the scheduler.
+.IP
+The prototype of this plugin callback is:
+.nf
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+SVM_Boolean scheduler_<scheduler name>_detach(const void *svm, void *handler, SVM_Process process, const unsigned long int parameter)
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.IP
+The implementation of this plugin callback should accept to detach the process by returning TRUE or reject to detach the process by returning FALSE depending on its policy and parameters.
+.IP
+When the scheduler accepts to detach the process, it should release it from its structure and transform the process variable into a local variable.
+(Please refer to the SIMPLE VIRTUAL MACHINE INTERFACE (API) section for more details.)
+.IP
+By default, the Simple Virtual Machine calls this function by passing 0 as parameter.
+.TP
+.B String conversion
+This mandatory plugin callback is called when the internal state of the scheduler shall be transformed into a textual representation for display.
+.IP
+The prototype of this plugin callback is:
+.nf
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+SVM_String scheduler_<scheduler name>_print(const void *svm, void *handler)
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.IP
+The implementation of this plugin callback should build a text representing the scheduler structure.
+The returned string shall be created using the API function svm_string_new or its alternatives.
+
+.SS Usage
+Plugin schedulers can be used like the default scheduler.
+
+
+.SH PLUGIN OBJECT STRUCTURES
+Plugins can define structures.
+Structures are simplified types usable only from plugin callbacks.
+They can not be written into memory addresses.
+.P
+To ensure a complete independance between plugins, it is recommended to manage the structure memory and content only from plugin callbacks of the plugin defining the structure: The structure existence is public, and referencing a structure from other plugins is allowed, but the management of the structure itself should pass through plugin functions.
+(Please refer to the PLUGIN OBJECT FUNCTIONS section for more details.)
+
+.SS Configuration
+In the plugin configuration string, a structure is written:
+.nf
+---------------------------
+STRUCT <plugin entry point>
+---------------------------
+.fi
+where the second identifier of the plugin entry point is the structure name.
+
+.SS Plugin callbacks
+.TP
+.B Destruction
+This mandatory plugin callback is called when a value of the plugin structure is destroyed.
+.IP
+The prototype of this plugin callback is:
+.nf
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+void structure_<structure name>_delete(const void *svm, void *handler)
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.IP
+The implementation of this plugin callback should release all ressources held in the structure and free the memory at the handler pointer.
+.TP
+.B Copy
+This optional plugin callback allows the data to be copied.
+It is called when a copy is requested.
+When this plugin callback is not defined, an interruption is raised when a copy is requested.
+.IP
+The prototype of this plugin callback is:
+.nf
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+void* structure_<structure name>_copy(const void *svm, const void *handler)
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.IP
+The implementation of this plugin callback should create a copy of the data, and return the pointer of the copy.
+Please note that the handler is const and should not be modified here.
+
+.SS Usage
+Structures can be created within plugin callbacks using the API function svm_structure_new.
+They can be used as parameters in plugin functions, and stored in plugin types.
+
+
+.SH PLUGIN OBJECT FUNCTIONS
+Plugins can define functions.
+Functions are like instructions, but usable only from other plugin callbacks.
+.I They can not be invoked from the Simple Virtual Machine code.
+
+.SS Configuration
+In the plugin configuration string, a function is written:
+.nf
+----------------------------------------------------------
+FUNCTION <plugin entry point> <parameters> [ -> <return> ]
+----------------------------------------------------------
+.fi
+where the second identifier of the plugin entry point is the function name.
+.TP
+.B Parameters
+Parameters of functions are also regular expressions of parameters, with the same syntax.
+.IP
+On top of the atoms supported in instructions, functions also support:
+.nf
++-----------------------+--------------------------+
+| Syntax                | Accepted parameter       |
++-----------------------+--------------------------+
+| $<plugin entry point> | A structure of this type |
+| STRUCT                | Any structure            |
+| VARIABLE              | A variable               |
++-----------------------+--------------------------+
+.fi
+The dot (.) also matches structures and variables.
+.IP
+When a variable is transmitted as a parameter of a function, its scope is extended to the body of the function plugin callback body.
+(Please refer to the SIMPLE VIRTUAL MACHINE INTERFACE (API) section for more details.)
+.TP
+.B Return
+Return of functions are also limited regular expressions, with the same syntax and limitations as for instructions.
+The new atoms are also supported on return regular expressions.
+.IP
+When a variable is transmitted as a return value of a function, its scope is extended to the body of the caller plugin callback body.
+
+.SS Plugin callbacks
+The mandatory plugin callback associated to the function is the core of the plugin function.
+It is called when the function is invoked from other plugin callbacks, with a list of parameters compliant with the regular expression of parameters.
+.P
+The prototype of this plugin callback is:
+.nf
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+SVM_Variable function_<function name>(const void *svm, const SVM_Size argc, const SVM_Parameter argv[])
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.fi
+.P
+The implementation of this plugin callback depends on the goal of the function.
+In the plugin callback body, any access to a value of argv out of the range from 0 to argc-1 is invalid.
+.IP
+When the function has no return, the plugin callback shall return a null pointer.
+A valid value, structure or variable shall be returned otherwise.
+
+.SS Usage
+Plugin functions can be called only from plugin callbacks, even in a different plugin.
+This ability enables the cooperation between plugins using functions as interfaces.
+
+
+.SH PLUGIN OBJECT CONFIGURATION
+Plugins can define options and arguments to allow applications to configure the plugin.
+
+.SS Configuration
+In the plugin configuration string, an option is written:
+.nf
+----------------------------------
+OPTION <option name> -<key> <type>
+----------------------------------
+.fi
+where the second identifier of the plugin entry point is the option name, the key is a character among letters, capital letters and digits, and the type is:
+.nf
++------+-------------------------------------------------------------+-------------------------------------------------------------------------------------------+
+| Type | Usage                                                       | Value                                                                                     |
++------+-------------------------------------------------------------+-------------------------------------------------------------------------------------------+
+|  BLN | This option does not accept a value on the plugin line      | TRUE when the option is present on the plugin line, FALSE otherwise                       |
+|  INT | This option requires a positive or zero integer as argument | The integer value when the option is present on the plugin line, a null integer otherwise |
+|  STR | This option requires a string as argument                   | The string value when the option is present on the plugin line, a null string otherwise   |
++------+-------------------------------------------------------------+-------------------------------------------------------------------------------------------+
+.fi
+Each key shall be unique among option objects within a plugin.
+.P
+In the plugin configuration string, an argument is written:
+.nf
+-------------------------------
+ARGUMENT <argument name> <type>
+-------------------------------
+.fi
+where the second identifier of the plugin entry point is the argument name, and the type is:
+.nf
++------+---------------------------------------------------+-------------------+
+| Type | Usage                                             | Value             |
++------+---------------------------------------------------+-------------------+
+|  INT | This argument shall be a positive or zero integer | The integer value |
+|  STR | This argument shall be a string                   | The string value  |
++------+---------------------------------------------------+-------------------+
+.fi
+Argument objects order is important: this order will be the one used by applications to specify arguments values.
+.P
+In the plugin configuration string, extra arguments array is written:
+.nf
+--------------------------
+ARGUMENTS <arguments name>
+--------------------------
+.fi
+where the second identifier of the plugin entry point is the extra arguments array name.
+The arguments object can be defined only once in each plugin.
+
+.SS Plugin callbacks
+No plugin callback need to be defined for these plugin objects.
+
+.SS Usage
+Plugin configuration objects are used to let applications specify variants in the plugin usage they can do, like activating optional features or activating some concealment or avoid hardcodes in the plugin code.
+
+
+.SH SIMPLE VIRTUAL MACHINE INTERFACE (API)
+Plugin callbacks can interact with the Simple Virtual Machine by calling API functions in the Simple Virtual Machine C interface.
+This interface is usable in C++.
+The interface is located in the ===PKGINCLUDEDIR===/svm.h header file.
+This file contains some types and a lot of C functions.
+The names of these functions more or less follow the patterns:
+.nf
+++++++++++++++++++++++++++    ++++++++++++++++++++++++++++++++++++++++
+svm_<module name>_<action> or svm_<module name>_<action>_<object name>
+++++++++++++++++++++++++++    ++++++++++++++++++++++++++++++++++++++++
+.fi
+
+.SS Modules
+The modules are an arbitrary categorisation of all API functions.
+The goal of these modules is to group API functions modifying a specific concept of the Simple Virtual Machine.
+
+.SS Variables
+To ease the memory management, in particular in C, the memory of parameters and values returned from API functions used in plugin callbacks is managed by the Simple Virtual Machine.
+All Simple Virtual Machine values used in plugin callbacks have the same C type:
+.nf
+***********
+const void*
+***********
+.fi
+These opaque pointers are placeholders for Simple Virtual Machine objects, and are called Simple Virtual Machine variables.
+.I A Simple Virtual Machine variable can have a shorter scope than the object associated to this variable:
+When the variable references an object stored directly by the Simple Virtual Machine in its architecture, the object will survive in the machine even if the variable is destroyed.
+.TP
+.B Local variables
+By default, a created variable exists until the end of the plugin callback body where it has been created.
+If the variable is used outside this local scope, an interruption will be issued, as the variable is no longer valid.
+Such variable is called a local variable.
+.TP
+.B Global variables
+A local variable can be extended to the plugin scope: all plugin callbacks of the plugin using this variable will consider the variable valid.
+Such variable is called a global variable.
+.P
+Simple Virtual Machine variables are used for most of plugin callbacks parameters and plugin callbacks return values.
+They are also used as API function parameters.
+.I Simple Virtual Machine variables shall never be dereferenced or freed.
+
+.SS Documentation
+The Simple Virtual Machine interface has its own documentation, with details on each API function.
+This documentation can be generated using the
+.BR doxygen (1)
+command in the ===PKGINCLUDEDIR=== directory.
+(Copying the directory before running the Doxygen command may be required for access right reasons.)
+
+.SH PLUGINS MANAGER
+This singleton component within the base aims to manage plugins content.
+
+.SS Plugin objects
+This part of the plugin manager lists all plugin objects added to the Simple Virtual Machine architecture.
+(Please refer to the sections starting with PLUGIN OBJECT for more details.)
+.P
+The objects defined within plugins can be referenced by plugin entry points in the application file and in the Simple Virtual Machine code.
+(Please refer to MEMORIES and CODES sections for more details.)
+
+.SS Plugin contexts
+This part of the plugin manager contains the global variables for each plugin.
+(Please refer to the SIMPLE VIRTUAL MACHINE INTERFACE (API) section for more details.)
+
+
+.SH DEBUGGER
+The debugger is an interactive web application hosted by the virtual machine, displayed in a web browser.
+
+.SS Access
+The access to the user interface starts with a new page in a web browser to the address:
+.nf
+http://<SVM host IP>:<port specified in -d option>
+.fi
+.P
+The first input to provide is the login, randomly generated by the virtual machine at each connection attempt.
+This login can be used only once, and a failure will lock the interface. The page will have to be refreshed for a new attempt with a different login.
+When the authentication succeeds, the full user interface becomes accessible.
+
+.SS Features
+The user interface aims to be modular by presenting data in dialog boxes behaving like within a window manager.
+.P
+The debugger offers an exhaustive view of all concepts of the running virtual machine and their live values, synchronised between all clients connected to the virtual machine.
+.P
+It also allows developpers to set ephemeral break points on the code, and run the code instruction by instruction, either skipping function calls or not, pause or restart the execution, and return to a certain level of the return stack.
+.P
+Plugins can also interact with the debugger user interface by pushing dedicated break points, and asking values within forms to the developper through the user interface to alter the application execution.
+
+
+.SH PERFORMANCE
+The performance mode allows application tuning and dead code detection.
+.P
+The performance mode data are by default produced on the machine history logger, but this can be changed to be redirected to a dedicated logger.
+
+.SS Performance report
+When the details argument of the -p option is a positive integer, the virtual machine silently captures events and produces a performance report at the end of the execution.
+.P
+This report contains:
+.TP
+.B Profiling
+The performance trace log starts with the profiling section.
+.IP
+This section contains several tables sorting instructions against different criteria.
+.IP
+Within the tables, the columns mean:
+ - Cumulated: this is the total number of microseconds spent in the instruction,
+ - Percentile: this is the cumulated percentage of time spent in the instruction and above instructions,
+ - Occurences: this is the number of times an instruction is executed,
+ - Minimal: this is the minimal time of execution of the instruction,
+ - Average: this is the average time of execution of the instruction,
+ - Maximal: this is the maximal time of execution of the instruction,
+ - Speed: this is the ratio (maximal time-average time)/(maximal time-minimal time) in percent, to locate the average between the minimal and the maximal time (0% is bad, 100% is excellent),
+ - Stability: this is the ratio (maximal time-minimal time)/(maximal time) in percent, to evaluate the variability in execution time of the instruction,
+ - Accuracy: this is the ratio (occurences - occurences when overriden)/(occurences), to evaluate if the values are the ones from the instruction or from an overriden one, 
+ - Address: this is the instruction global address, 
+ - Instruction: this is the instruction text,
+ - Location and flags: this is the instruction location in the code and the instruction flags.
+.TP
+.B Code coverage
+The performance trace log continues with the code coverage section.
+.IP
+This section lists all codes with at least one executed instruction.
+.IP
+For each listed code, it displays:
+ - The code coverage,
+ - The instructions with the number of occurences.
+.TP
+.B Summary
+The performance trace log ends with a summary section.
+.IP
+This section shows global statistics on the application execution, like the instruction execution average time and the global code coverage.
+
+.SS Performance events
+When the details argument of the -p option is the value "raw", the virtual machine produces JSON events at every executed instruction.
+.P
+When the events are produced on the machine history logger, they are preceded by a header, like any trace.
+Each event is a JSON object written on one line.
+.P
+The events can be:
+.TP
+.B Instruction declaration
+This event is triggered to declare a new instruction.
+.IP
+This event contains:
+ - type: Always "new",
+ - id: The declared identifier, to be used to correlate events,
+ - location:
+    - svm: The virtual machine PID,
+ - address:
+    - code:
+       - name: The code name of the address of the instruction,
+       - id: A unique identifier of the code,
+    - local: The local part of the address of the instruction,
+ - instruction:
+    - text: The instruction code text,
+    - extra: Extra data about the instruction, like the code location,
+    - waiting: The waiting flag of the instruction.
+.TP
+.B Instruction execution
+This event is triggered when an instruction is executed.
+.IP
+This event contains:
+ - type: Always "run",
+ - id : The identifier to correlate to the instruction address and text,
+ - location:
+    - svm: The virtual machine PID,
+    - process: A process identifier where the instruction is executed,
+    - kernel: A kernel identifier where the instruction is executed,
+    - stack: The processor stack size when the instruction is executed (usually indicates function nesting),
+ - time:
+    - at: The start time of the instruction execution (from a reference located around the machine start),
+    - duration: The instruction duration,
+    - unit: A string indicating in which unit are presented time values,
+ - override: A flag indicating whether the instruction has been overriden by another one in the processor.
+
+
+.SH EXAMPLES
+This section will show small useless applications written with the Simple Virtual Machine.
+
+.SS A simple hello world
+.nf
+=================================================
+#!===PKGBINDIR===/svm
+DESCRIPTION                                       Description for help
+A simple hello world.
+But a customisable one!
+END
+LOG                                               Produce error traces on stderr
+PLUGIN "svmcom.so"                                Use the official plugin com, please refer to the manpage svm_plugin_com(7)
+OPTION -w STR who HELP "greeting to someone else" Declare the -w option to take a string as argument, accessible in memory under alias who
+PROCESS "hello"                                   Declare the hello process, with default sequencer, and attached to the default scheduler
+   CODE "main" INLINE                             Code executed in the first kernel of the process hello, inlined
+      :goto ok :when &who INITIALISED             Local static jump when the first address of the alias who contains a value
+      "world" -> &who                             Default value assigned to the first address of who
+   :label ok                                      Local target of the local static jump
+      :com.message "Hello " @&who "!"             Use the message instruction of the plugin com to produce the message on stdout
+   END                                            End of the code main
+   MEMORY who                                     Declare the who alias containing the option -w argument in the first kernel of the process
+END                                               End of the process hello
+=================================================
+.fi
+
+.SS A small RPN calculator server
+.nf
+=====================================================================
+#!===PKGBINDIR===/svm
+DESCRIPTION                                                           Description for help
+A simple RPN calculator server.
+END
+LOG                                                                   Produce error traces on stderr
+PLUGIN "svmcom.so"                                                    Use the official plugin com, please refer to the manpage svm_plugin_com(7)
+PLUGIN "svmrun.so"                                                    Use the official plugin run, please refer to the manpage svm_plugin_run(7)
+PLUGIN "svmstr.so"                                                    Use the official plugin str, please refer to the manpage svm_plugin_str(7)
+PLUGIN "svmreal.so"                                                   Use the official plugin real, please refer to the manpage svm_plugin_real(7)
+PLUGIN "svmmath.so"                                                   Use the official plugin math, please refer to the manpage svm_plugin_math(7)
+OPTION -i STR ip HELP "refine listening IP address"                   Declare the -i option to take a string as argument, accessible in memory under alias ip
+ARGUMENT STR port HELP "listening TCP port"                           Declare a string argument, accessible in memory under alias port
+PROCESS "server"                                                      Declare the server process, with run.stack sequencer, and attached to the default scheduler
+   CODE "main" INLINE                                                 Code executed in the first kernel of the process server, inlined
+      :memory com.device/server                                       Allocate one address of type com.device, with creation of the alias server
+      :goto ip_defined :when &ip INITIALISED                          Local static jump when the first address of the alias ip contains a value
+      "localhost" -> &ip                                              Default value assigned to the first address of the alias ip
+   :label ip_defined                                                  Local target of jump
+      :interruption GLOBAL TERMINATE end                              Define a global interruption handler for TERMINATE interruption, able to catch hardware interruptions
+      :com.open com.tcp < @&ip @&port -> &server                      Open a TCP socket in listening mode
+   :label server_loop                                                 Start the main server loop
+      :call wait_client server                                        Function call, mainly for memory management reasons
+      :goto server_loop                                               End the main server loop
+   :label wait_client                                                 Function wait_client
+      :memory com.device/client                                       Allocate one address of type com.device, with creation of the alias client
+      :com.command @&server CLIENT -> &client                         Wait for client connection on listening TCP socket
+      :run.parallel_call $"client" client "client" SCHED=run.parallel Create a process named client, with sequencer run.stack, and attached to the scheduler run.parallel
+      :return                                                         Function return, with memory liberation on alias client
+   :label end                                                         Local target of jump for hardware interruption handling
+      :shutdown 0                                                     Exit the Simple Virtual Machine with code 0 (System instruction)
+   :symbol client                                                     Symbol client, used by run.parallel_call instruction
+      :memory STR/query, STR/code, LIB/lib, STR/type, AUTO/result     Allocate five memory addresses, with an alias on each of them
+      :com.read @&P com.line -> &query                                Wait for one line client query from client socket, located by run.parallel in P
+      :str.replace @&query ALL CONST str.pattern "[#\(rsn]" => ""        Remove hashes and line returns from query string
+      :str.join ":math.rpn " @&query " -> &P\(rsn:return\(rsn" -> &code     Concatenate strings to build code
+      :interruption FAILURE wrong_code                                Define a local interruption handler, as :library raises a FAILURE interruption on invalid code
+      :library "compute" @&code -> &lib                               Compile the code and build a library
+      :interruption FAILURE                                           Remove the local interruption handler
+      :interruption NUMERIC wrong_code                                Define a local interruption handler, as math.rpn raises a NUMERIC interruption on invalid input
+      :run.protected_call $(@&lib/) result                            Create a protected kernel to run library, use the run.stack sequencer to run the protected kernel first
+      :interruption NUMERIC                                           Remove the local interruption handler
+      [ "Real" ] -> type                                              Pointer initialisation
+      :goto real :unless &result IS INT                               Local static jump when the result type is not an integer
+      "Integer" -> &type                                              Value initialisation
+   :label real                                                        Local target of jump
+      :com.write @&P @&type ": " @&result "\(rsn"                        Write type and result to client socket
+      :shutdown                                                       Stop current processor, and terminate client process
+   :label wrong_code                                                  Local target of jump for software interruption handling
+      :com.write @&P "Invalid expression\(rsn"                           Write error to client socket
+      :shutdown                                                       Stop current processor, and terminate client process
+   END                                                                End of code main
+   MEMORY ip port                                                     Declare the ip and port aliases containing options and arguments
+   SEQUENCER run.stack                                                Set the sequencer of the process server, reused by run.parallel_call to set it on processes named client
+END                                                                   End of process server
+=====================================================================
+.fi
+
+.SS Simple application with custom plugins
+.nf
+=========================================================================
+#!===PKGBINDIR===/svm
+DESCRIPTION                                                               Description for help
+Custom plugin example.
+END
+LOG SERVER "localhost" 40000 QUIET                                        Produce error traces on log server if any
+PLUGIN "svmcom.so"                                                        Use the official plugin com, please refer to the manpage svm_plugin_com(7)
+PLUGIN "svmstr.so"                                                        Use the official plugin str, please refer to the manpage svm_plugin_str(7)
+LOCAL PLUGIN "svmpluginvalues/libsvmvalues.so"                            Use custom plugin values (see below)
+LOCAL PLUGIN "svmplugininteger/libsvminteger.so"                          Use custom plugin integer (see below)
+PROCESS "values"                                                          Declare process values, with default sequencer, and attached to the default scheduler
+   CODE "main" INLINE                                                     Code executed in the first kernel of the process values, inlined
+      :memory values.map/m, STR/k, AUTO/v, PTR/p                          Allocate memory, and define corresponding aliases
+      :values.new "a" => 1 , "aa" => 2 , "b" => "str" , "c" => TRUE -> &m Call the custom plugin instruction values.new, to initialise the map of values
+      :values.keys @&m -> &p                                              Call the custom plugin instruction values.keys, to get an array of keys
+   :label loop                                                            Local target of jump
+      :str.join " " { @&p } -> &k                                         Concatenate the key values separated by a space
+      :com.message "Available keys: " @&k                                 Display all keys on stdout
+      :values.map @&m integer.shift 5                                     Add 5 to all integers in the map of values using the plugin function integer.shift
+      :com.prompt "key" STR -> &k                                         Ask for key value on stdin with prompt
+      :interruption !values.not_found fail                                Define a local interruption handler in case of wrong key
+      :values.get @&m @&k -> &v                                           Get the value associated to the key
+      :com.message "Value: " @&v                                          Display the value on stdout
+      :shutdown                                                           Stop the current processor, and terminate the values process
+   :label fail                                                            Local target of jump for software interruption handling
+      :com.message "Fail!"                                                Display an error
+   END                                                                    End of code main
+END                                                                       End of process values
+=========================================================================
+.fi
+.nf
+========================================================================================
+PLUGIN values                                                                            Declare the plugin values
+
+includes:                                                                                Declare C++ includes
+%{
+#include <map>
+%}
+
+DEFINE                                                                                   Define plugin objects
+
+TYPE values.map                                                                          Plugin type values.map, with only destructor defined
+%{
+   std::map<std::string,SVM_Value> _map;                                                 Type contains a map C++ string => values
+%}
+delete default:
+%{
+   for(auto& v:object->_map)                                                             Before deletion, all SVM variables within map need to be set local to trigger deletion
+   {
+      ::svm_variable_scope_set_local(svm,v.second);
+   }
+%}
+help: "Map of values"
+
+INSTRUCTION values.new ( STR => VALUE ( , STR => VALUE ) * ) ? -> values.map
+%{
+   type_map *t = new type_map();
+   for(SVM_Size i = 0 ; i<argc ; i+=4)                                                   Loop on instruction parameters, keys every 4 parameters, values also, shifted by 2
+   {
+      auto k = ARGV_VALUE(i,string);
+      SVM_Value v = ::svm_parameter_value_get(svm,argv[i+2]);
+      if(t->_map.insert(std::make_pair(std::string(k.string,k.size),v)).second)
+      {
+         ::svm_variable_scope_set_global(svm,v);                                         Variable set to global to be known from other plugin callbacks
+      }
+   }
+   return NEW_PLUGIN(values,map,t);                                                      Return new value of type values.map
+%}
+help: "Values map creation and initialisation"
+
+INSTRUCTION values.add MUTABLE values.map STR:key VALUE
+%{
+   auto t = ARGV_PLUGIN(0,values,map);                                                   Parse parameters
+   auto k = ARGV_VALUE(1,string);
+   auto v = ::svm_parameter_value_get(svm,argv[2]);
+   if(t->_map.insert(std::make_pair(std::string(k.string,k.size),v)).second)
+   {
+      ::svm_variable_scope_set_global(svm,v);                                            Set the variable to global to be known from other plugin callbacks
+   }
+%}
+help: "Add value to map, when key is undefined"
+
+INTERRUPTION values.not_found
+help: "When key does not exist"
+
+INSTRUCTION values.get values.map STR:key -> VALUE
+%{
+   auto t = ARGV_PLUGIN(0,values,map);
+   auto k = ARGV_VALUE(1,string);
+   auto it = t->_map.find(std::string(k.string,k.size));
+   if(it==t->_map.end())
+   {
+      ERROR_EXTERNAL(values,not_found,"Key not found in map");                           Raises a plugin interruption to specify an error
+   }
+   return it->second;
+%}
+help: "Get a value from a map by key"
+
+INSTRUCTION values.del MUTABLE values.map STR:key
+%{
+   auto t = ARGV_PLUGIN(0,values,map);
+   auto k = ARGV_VALUE(1,string);
+   auto it = t->_map.find(std::string(k.string,k.size));
+   if(it!=t->_map.end())
+   {
+      ::svm_variable_scope_set_local(svm,it->second);                                    Set variable as local to trigger deletion
+      t->_map.erase(it);
+   }
+%}
+help: "Remove a key from map"
+
+INSTRUCTION values.keys values.map -> PTR
+%{
+   auto t = ARGV_PLUGIN(0,values,map);
+   SVM_Memory_Zone z = ::svm_memory_zone_new(svm);                                       Allocate an array of strings into memory
+   ::svm_memory_zone_append_internal__raw(svm,z,STRING,t->_map.size());
+   SVM_Value_Pointer p = ::svm_memory_allocate(svm,CURRENT(kernel),z);
+   ::svm_memory_scope_set_local(svm,CURRENT(kernel),p);
+   SVM_Address a = ::svm_value_pointer_get_address(svm,p);
+   for(auto v: t->_map)
+   {
+      SVM_String s = ::svm_string_new(svm,v.first.c_str(),v.first.size());
+      ::svm_memory_write_address(svm,CURRENT(kernel),a++,::svm_value_string_new(svm,s)); Write key value into memory
+   }
+   return p;                                                                             Returns the pointer on the array of strings
+%}
+help: "Returns array of keys from map"
+
+INSTRUCTION values.map MUTABLE values.map PEP:function . *:parameters
+%{
+   auto t = ARGV_PLUGIN(0,values,map);
+   SVM_Value_PluginEntryPoint f = ::svm_parameter_value_get(svm,argv[1]);                Get the plugin function name as a plugin entry point
+   SVM_Parameter *p = ::svm_parameter_array_new(svm,argc-1);                             Prepare the parameters of the plugin function call
+   for(size_t i = 2 ; i<argc ; ++i)
+   {
+      p[i-1]=argv[i];
+   }
+   decltype(t->_map) map;
+   for(auto v:t->_map)
+   {
+      p[0] = ::svm_parameter_value_new(svm,v.second);                                    Set the map value to the plugin function parameters
+      SVM_Variable r = ::svm_function_call(svm,f,argc-1,p);                              Call the plugin function call with parameters
+      if(::svm_variable_type_is_value(svm,r))                                            As we did not check whether the function returns a value
+      {
+         ::svm_variable_scope_set_local(svm,v.second);                                   Set to local the old value to trigger deletion
+         map.insert(std::make_pair(v.first,r));                                          Replace with the new value
+         ::svm_variable_scope_set_global(svm,r);                                         Set to global the new value for other plugin callbacks
+      }
+   }
+   t->_map.swap(map);
+%}
+help: "Apply a function to values of a map"
+========================================================================================
+.fi
+.nf
+=================================================================
+PLUGIN integer                                                    Declare the plugin integer
+
+DEFINE                                                            Define plugin objects
+
+FUNCTION integer.shift VALUE INT -> VALUE
+%{
+   SVM_Value v = ::svm_parameter_value_get(svm,argv[0]);
+   auto s = ARGV_VALUE(1,integer);
+   if(::svm_value_type_is_integer(svm,v))                         This function alters only integers
+   {
+      return NEW_VALUE(integer,::svm_value_integer_get(svm,v)+s); Compute the new integer
+   }
+   else
+   {
+      return v;                                                   Return the value untouched
+   }
+%}
+=================================================================
+.fi
+Please refer to manpage
+.BR svm_plugin (1)
+for plugin definition file syntax.
+
+.SS A strange scheduler
+.nf
+==============================================================
+#!===PKGBINDIR===/svm
+LOG                                                            Produce error traces on stderr
+PLUGIN "svmrun.so"                                             Use the official plugin run, please refer to the manpage svm_plugin_run(7)
+LOCAL PLUGIN "svmpluginprocess_event/libsvmprocess_event.so"   Use the custom plugin process_event (see below)
+
+PROCESS "listener"                                             Declare process listener, with default sequencer and attached to the strange scheduler
+   CODE "main" INLINE                                          Code executed in the first kernel of the process listener, inlined
+      :memory INT/i                                            Allocate memory with defined alias
+      [ 0 ] -> i                                               Initialisation of memory
+      :interruption !process_event.success end                 Declare local interruption handler to manage process successful terminaison event
+      :process_event.receive TRUE                              Register to the strange scheduler to receive process terminaison events
+   :label loop                                                 Local target of jump
+      :run.sleep HARD 1                                        Wait 1 second
+      :run.trace LOCATION "Wait: " @&i                         Trace for checkpoint
+      :shift &i                                                Increment memory
+      :goto loop                                               Infinite jump to local target?
+   :label end                                                  Local target to software interruption handler to manage process events
+      :run.sleep HARD 1                                        Wait 1 second
+      :run.trace LOCATION "Event detected"                     Trace for event handler checkpoint
+   END                                                         End of code main
+   SCHEDULER process_event.controler                           Scheduler of the process listener
+END                                                            End of process listener
+
+PROCESS "actor"                                                Declare process actor, with default sequencer and attached to the strange scheduler
+   CODE "main" INLINE                                          Code executed in the first kernel of the process actor, inlined
+      :run.trace LOCATION "Start"                              Trace for checkpoint
+      :run.sleep HARD 3                                        Wait 3 seconds
+      :run.trace LOCATION "End"                                Trace for checkpoint
+   END                                                         End of code main
+   SCHEDULER process_event.controler                           Scheduler of the process listener
+END                                                            End of process actor
+==============================================================
+.fi
+.nf
+=======================================================================================================
+PLUGIN process_event                                                                                    Declare plugin process_event
+
+includes:                                                                                               Declare C++ includes
+%{
+#include <mutex>
+#include <set>
+%}
+
+code:                                                                                                   Declare C++ code inclusion
+%{
+void interrupt(const void *svm, const std::set<SVM_Process>& notif, SVM_Value_PluginEntryPoint i)
+{
+   SVM_Value_Interruption irq = ::svm_value_interruption_new_external__raw(svm,i,"event");              Create interruption from name
+   for(auto p: notif)
+   {
+      SVM_Process_Lock l = ::svm_process_ownership_lock(svm,p);                                         Get a lock on process
+      if(not l) continue;                                                                               If lock is not acquired, forget the process
+      SVM_Kernel k = ::svm_process_kernel_get_current(svm,p);                                           Get kernel under execution within process
+      if(k)                                                                                             If such kernel exists
+      {
+         ::svm_processor_add_interruption(svm,k,irq);                                                   Raise an interruption!
+      }
+      ::svm_variable_delete(svm,l);                                                                     Release the process lock
+   }
+}
+%}
+
+DEFINE
+
+INTERRUPTION process_event.success
+INTERRUPTION process_event.failure
+
+SCHEDULER process_event.controler                                                                       Define the strange scheduler
+%{
+   std::set<SVM_Process> _processes;
+   std::set<SVM_Process> _notification;
+   mutable std::mutex _lock;
+   operator std::string () const { return ""; }
+%}
+create default: %{ }
+delete default:
+%{
+   std::lock_guard<std::mutex> step(object->_lock);                                                     Need to get a lock here, as an instruction can modify the structure
+   for(auto p: object->_processes)
+   {
+      ::svm_variable_scope_set_local(svm,p);                                                            Set variables to local to trigger deletion
+   }
+%}
+schedule object:
+%{
+   std::lock_guard<std::mutex> step(object->_lock);
+   switch(state)
+   {
+      case SUSPENDED:
+         ::svm_process_run__raw(svm,process,0);                                                         Run the process once it is ready
+         break;
+      case ZOMBIE:
+         ::interrupt(svm,object->_notification,CONST_PEP(process_event,success));                       Trigger success event as interruption when process dies
+         break;
+      case INTERRUPTED:
+      case ERROR:
+         ::interrupt(svm,object->_notification,CONST_PEP(process_event,failure));                       Trigger failure event as interruption when process dies
+         break;
+      default:
+         break;
+   }
+   return 0;                                                                                            No timer needed
+%}
+attach object:
+%{
+   std::lock_guard<std::mutex> step(object->_lock);
+   auto it = object->_processes.find(process);
+   if(it!=object->_processes.end())
+      return FALSE;                                                                                     Reject a process already attached
+   object->_processes.insert(process);
+   ::svm_variable_scope_set_global(svm,process);                                                        Set variable to global for other plugin callbacks
+   return TRUE;                                                                                         Accept the process
+%}
+detach object:
+%{
+   std::lock_guard<std::mutex> step(object->_lock);
+   auto it = object->_processes.find(process);
+   if(it==object->_processes.end())
+      return FALSE;                                                                                     Reject when the process is not attached to scheduler
+   object->_processes.erase(it);
+   auto itt = object->_notification.find(process);
+   if(itt!=object->_notification.end())
+   {
+      object->_notification.erase(itt);
+   }
+   ::svm_variable_scope_set_local(svm,process);                                                         Set variable to local to trigger deletion
+   return TRUE;                                                                                         Accept to leave the process
+%}
+print default: %{}
+
+WAITING INSTRUCTION process_event.receive BLN
+%{
+   auto b = ARGV_VALUE(0,boolean);
+   SVM_Scheduler s = ::svm_scheduler_get(svm,CONST_PEP(process_event,controler));                       Get the strange scheduler
+   auto object = const_cast<scheduler_controler*>(                                                      Normally, scheduler structure should be read only
+      reinterpret_cast<const scheduler_controler*>(::svm_scheduler_get_internal(svm,s))                 Get the internal structure of scheduler
+      );
+   std::lock_guard<std::mutex> step(object->_lock);
+   SVM_Process process = CURRENT(process);
+   auto it = object->_processes.find(process);
+   if(it==object->_processes.end())
+      ERROR_INTERNAL(FAILURE,"Process not controled by SCHEDULER process_event.controler");             Raise interruption when current process not attached to strange scheduler
+   if(b)
+   {
+      object->_notification.insert(process);                                                            Add current process to notification list
+   }
+   else
+   {
+      auto itt = object->_notification.find(process);
+      object->_notification.erase(itt);                                                                 Remove current process from notification list
+   }
+%}
+=======================================================================================================
+.fi
+Please refer to manpage
+.BR svm_plugin (1)
+for plugin definition file syntax.
+
+
+.SH SEE ALSO
+.BR svm_plugin (1)
+for plugin generation and
+.BR "svm_plugin_<plugin name>" (7)
+for specific plugin documentation.
+
+
+.SH AUTHOR
+The Simple Virtual Machine is designed, implemented and maintained by Julien Bruguier <===EMAILCONTACT===>.
+
+
+.SH BUGS
+In case of bug on the virtual machine or on a plugin delivered with it, please send an email to the address above.
+Other plugins can not be covered here, so please contact preferably the author of the plugin whenever possible.

@@ -1,0 +1,73 @@
+/*
+ * Simple Virtual Machine - A versatile and robust architecture to
+ * easily write applications.
+ * Copyright (C) 2021  Julien BRUGUIER
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+:root
+{
+	--main: black;
+
+	--mainbarfg: white;
+	--mainbarbg: black;
+	--desktopbg: #F0F0F0;
+
+	--menufg: black;
+	--menubg: white;
+	--selectedmenufg: var(--menufg);
+	--selectedmenubg: lightgrey;
+
+	--windowbg: lightgrey;
+	--windowboxbg: lightgrey;
+	--windowbarfocusfg: white;
+	--windowbarfocusbg: black;
+	--windowbarfg: black;
+	--windowbarbg: darkgrey;
+	--windowbarborder: var(--windowbarborder);
+	--windowbuttonfocusfg: white;
+	--windowbuttonfocusbg: black;
+	--windowbuttonfg: black;
+	--windowbuttonbg: darkgrey;
+	--selectedwindowbuttonfocusfg: black;
+	--selectedwindowbuttonfocusbg: white;
+	--selectedwindowbuttonfg: white;
+	--selectedwindowbuttonbg: black;
+	--active: grey;
+	--windowtoolbarborder: black;
+
+	--helpfg: black;
+	--helpbg: white;
+
+	--buttonfg: black;
+	--buttonbg: lightgrey;
+	--selectedbuttonfg: white;
+	--selectedbuttonbg: black;
+
+	--codeseparator: grey;
+	--codefg: white;
+	--codebg: black;
+	--codecomment: darkgrey;
+	--codeinstruction: white;
+	--codetype: white;
+	--codeconstant: grey;
+	--codekeyword: lightgrey;
+	--codeoperator: darkgrey;
+	--codemarker: darkgrey;
+
+	--memorypointerfg: black;
+	--memorypointerbg: darkgrey;
+}
+

@@ -1,0 +1,32 @@
+#!/bin/sh -x
+GREP=${GREP:-grep}
+SED=${SED:-sed}
+echo "Using $GREP"
+echo "Using $SED"
+(
+	cat $1 | ${SED} -n '/\/\// n;  /^SVM_TYPE / {s/[ \t]\+/ /g; p; } ; /^SVM_FUNCTION / { s/[ \t]\+/ /; p;};  /^SVM_TYPE_BEGIN$/ {x;}; /^SVM_TYPE_END$/ {x;y/\n/ /;s/^.*typedef/SVM_TYPE typedef/;s/[ \t]\+/ /g; p;}; /^SVM_/ !{H;}' | sort |
+	while read objet ;
+	do
+		objet=$(echo "$objet" | ${SED} 's/\/\*\([^*]\|\*[^/]\)*\*\// /g; s/ \+/ /g' )
+		if echo "$objet" | ${GREP} '^SVM_TYPE' &>/dev/null ;
+		then
+			echo -n "syntax keyword SVMType "
+			echo -n "$objet" | ${SED} 's/{[^}]*}//; s/;//; s/^.*SVM_/SVM_/;'
+			echo " contained"
+			if echo "$objet" | ${GREP} ' enum ' &>/dev/null ;
+			then
+				echo "$objet" | ${SED} 's/^[^{]*{//; s/}[^}]*$//; s/,/\n/g;'|
+				while read constant ;
+				do
+					echo "$constant" | ${SED} 's/ *= .*//; s/^/syntax keyword SVMConstant /; s/$/ contained/;'
+				done
+			fi
+		fi
+		if echo $objet | ${GREP} '^SVM_FUNCTION' &>/dev/null ;
+		then
+			echo -n "syntax keyword SVMFunction "
+			echo -n "$objet" | ${SED} 's/(.*$//; s/^.*svm_/svm_/;'
+			echo " contained"
+		fi
+	done
+) >> $2

@@ -1,0 +1,81 @@
+.TH "Simple Virtual Machine - Official plugin bool" 7 "2020-12-10"
+.SH SYNOPSIS
+.B svm_plugin_bool
+\- Simple Virtual Machine official plugin for boolean management. 
+.SH DESCRIPTION
+This plugin introduces extra features to manage built-in type
+.B BLN
+values.
+.SH INVOKATION
+This plugin can be added to the Simple Virtual Machine using the directive:
+.nf
+
+PLUGIN "svmbool.so"
+
+.fi
+.SH CONTENT
+.SS Basic operations
+.SS INSTRUCTION bool.and ( BLN * | PTR ) -> BLN
+This instruction returns the logical and of a set of booleans.
+If the set is empty, TRUE is returned.
+When a pointer is specified, the instruction uses the pointed memory block as boolean set.
+.SS INSTRUCTION bool.equal BLN BLN -> BLN
+This instruction returns TRUE when the two booleans are the same ones, FALSE otherwise.
+.SS INSTRUCTION bool.nand ( BLN * | PTR ) -> BLN
+This instruction returns the logical negative and of a set of booleans.
+If the set is empty, FALSE is returned.
+When a pointer is specified, the instruction uses the pointed memory block as boolean set.
+.SS INSTRUCTION bool.nor ( BLN * | PTR ) -> BLN
+This instruction returns the logical negative or of a set of booleans.
+If the set is empty, TRUE is returned.
+When a pointer is specified, the instruction uses the pointed memory block as boolean set.
+.SS INSTRUCTION bool.not BLN -> BLN
+This instruction returns the logical negation of a boolean.
+.SS INSTRUCTION bool.or ( BLN * | PTR ) -> BLN
+This instruction returns the logical or of a set of booleans.
+If the set is empty, FALSE is returned.
+When a pointer is specified, the instruction uses the pointed memory block as boolean set.
+.SS INSTRUCTION bool.xor BLN BLN -> BLN
+This instruction returns TRUE when the two booleans are different, FALSE otherwise.
+.SS Boolean expressions
+.SS INSTRUCTION bool.rpn ( [ BLN 'NOT' 'AND' 'OR' 'XOR' 'NAND' 'NOR' 'EQUAL' ] | { PEP INT } ) + -> BLN
+This instruction evaluates a full boolean expression written using the reverse polish notation (aka. post-fixed operations: a AND b is written a b AND).
+.IP
+Boolean values can be constants or values coming from the memory.
+.B NOT
+is the unary negation of a boolean.
+.BR AND ,
+.BR OR ,
+.BR XOR ,
+.BR NAND ,
+.BR NOR ,
+.B EQUAL
+are binary operations supported in this plugin.
+.BR { " " PEP " " INT " " }
+are function calls: the plugin entry point is the function name and the integer the number of parameters of the function.
+The function has to be a valid plugin function following this definition:
+.B FUNCTION <plugin>.bool_<entry> BLN * -> BLN
+.SS Boolean functions
+.SS FUNCTION bool.not BLN -> BLN 
+This function does the same operation as the corresponding instruction.
+.SS FUNCTION bool.and ( BLN * | PTR ) -> BLN 
+This function does the same operation as the corresponding instruction.
+.SS FUNCTION bool.or ( BLN * | PTR ) -> BLN 
+This function does the same operation as the corresponding instruction.
+.SS FUNCTION bool.xor BLN BLN -> BLN 
+This function does the same operation as the corresponding instruction.
+.SS FUNCTION bool.nand ( BLN * | PTR ) -> BLN 
+This function does the same operation as the corresponding instruction.
+.SS FUNCTION bool.nor ( BLN * | PTR ) -> BLN 
+This function does the same operation as the corresponding instruction.
+.SS FUNCTION bool.equal BLN BLN -> BLN 
+This function does the same operation as the corresponding instruction.
+.SS FUNCTION bool.format BLN INT:size [ 'LEFT' 'CENTER' 'RIGHT' ] ? ( [ 'UPPER' 'LOWER' 'CAMEL' 'LETTER' 'NUM' ] | STR:true STR:false ) -> STR
+This function formats a boolean into a string.
+The resulting string has the requested size, and the boolean value is put left (default alignement), centered or put right.
+The rendering of the boolean is set as: TRUE/FALSE for UPPER, true/false for LOWER, True/False for CAMEL, T/F for LETTER, 1/0 for NUM, and set to the given values when specified.
+.SH SEE ALSO
+.BR svm (1)
+for help on the Simple Virtual Machine.
+.SH AUTHOR
+The Simple Virtual Machine is designed, implemented and maintained by Julien Bruguier <===EMAILCONTACT===>.

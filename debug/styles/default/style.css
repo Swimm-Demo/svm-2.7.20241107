@@ -1,0 +1,479 @@
+/*
+ * Simple Virtual Machine - A versatile and robust architecture to
+ * easily write applications.
+ * Copyright (C) 2021  Julien BRUGUIER
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+html, body
+{
+	margin:0;
+	padding:0;
+	color: var(--main);
+}
+
+div.main_bar
+{
+	position: fixed;
+	top:0;
+	left:0;
+	height:30px;
+	width:100%;
+	color: var(--mainbarfg);
+	background-color: var(--mainbarbg);
+	padding:5px;
+	margin:0;
+}
+
+div.main_bar div.menu_button
+{
+	display:inline;
+	border: solid 1px;
+	color: var(--menufg);
+	background-color: var(--menubg);
+	margin-right: 5px;
+	cursor: pointer;
+	position: relative;
+	top: 4px;
+}
+
+div.main_bar div.menu_button:hover
+{
+	color: var(--selectedmenufg);
+	background-color: var(--selectedmenubg);
+}
+
+div.main_bar div.application
+{
+	display: inline;
+	font-weight: bold;
+	cursor: default;
+	position: relative;
+	top: 5px;
+	left: 30px;
+}
+
+div.desktop
+{
+	position:fixed;
+	padding:0;
+	margin:0;
+	top:40px;
+	left:0;
+	width:100%;
+	height:calc(100% - 40px);
+	height:-moz-calc(100% - 40px);
+	height:-webkit-calc(100% - 40px);
+	height:-o-calc(100% - 40px);
+	background-color: var(--desktopbg);
+}
+
+div.window
+{
+	border: solid 1px;
+	background-color: var(--windowbg);
+}
+
+div.window div.window_title_bar.focus
+{
+	color: var(--windowbarfocusfg);
+	background-color: var(--windowbarfocusbg);
+	padding: 3px;
+}
+
+div.window div.window_title_bar
+{
+	color: var(--windowbarfg);
+	background-color: var(--windowbarbg);
+	padding: 3px;
+	cursor: default;
+}
+
+div.windows_list_window
+{
+	border: solid 1px;
+	margin: 1px;
+}
+
+div.window_title
+{
+	overflow: hidden;
+	height: 20px;
+}
+
+div.window_title_bar div.window_buttons
+{
+	float:right;
+	margin-left: 5px;
+}
+
+div.window_title_bar div.window_button
+{
+	border: solid 1px;
+	padding-left: 1px;
+	padding-right: 1px;
+	margin-right: 5px;
+	position: static;
+	top:1px;
+	min-width: 2em;
+	background-color: var(--windowbuttonbg);
+	box-shadow: 1px 1px var(--windowbuttonfg);
+}
+
+div.window_title_bar.focus div.window_button
+{
+	background-color: var(--windowbuttonfocusbg);
+	box-shadow: 1px 1px var(--windowbuttonfocusfg);
+}
+
+div.window_title_bar div.window_button:hover
+{
+	color: var(--selectedwindowbuttonfg);
+	background-color: var(--selectedwindowbuttonbg);
+	cursor: pointer;
+	box-shadow: none;
+}
+
+div.window_title_bar.focus div.window_button:hover
+{
+	color: var(--selectedwindowbuttonfocusfg);
+	box-shadow: none;
+	background-color: var(--selectedwindowbuttonfocusbg);
+}
+
+div.window_title_bar div.window_buttons_help::after
+{
+	content: "?";
+}
+
+div.window_title_bar div.window_buttons_alarm::after
+{
+	content: "!";
+}
+
+div.window_title_bar div.window_buttons_hide::after
+{
+	content: "-";
+}
+
+div.window_title_bar div.window_buttons_close::after
+{
+	content: "x";
+}
+
+div.window.help div.window_content
+{
+	color: var(--helpfg);
+	background-color: var(--helpbg);
+	padding:5px;
+}
+
+div.help_content
+{
+	overflow: auto;
+	width:300px;
+}
+
+div.help_large_content
+{
+	overflow: auto;
+	width:500px;
+}
+
+div.window div.window_content
+{
+	background-color: var(--windowboxbg);
+	padding:1px;
+}
+
+div.window_title_bar div.active
+{
+	color: var(--active);
+}
+
+div.button
+{
+	border: solid 1px var(--buttonfg);
+	background-color: var(--buttonbg);
+	margin: 2px;
+	padding: 1px;
+	box-shadow: 1px 1px var(--buttonfg);
+}
+
+div.button:hover
+{
+	color: var(--selectedbuttonfg);
+	background-color: var(--selectedbuttonbg);
+	cursor: pointer;
+	box-shadow: none;
+}
+
+div.button.line
+{
+	display: inline-block;
+}
+
+td.button:hover
+{
+	cursor: pointer;
+}
+
+div.processor_pause::after
+{
+	content: "||";
+}
+
+div.processor_instruction::after
+{
+	content: ">.";
+}
+
+div.processor_function::after
+{
+	content: ">_";
+}
+
+div.processor_run::after
+{
+	content: ">>";
+}
+
+div.processor_return::after
+{
+	content: ">^";
+}
+
+table.code
+{
+	margin: 2px;
+	border-spacing: 0px;
+}
+
+pre.extra
+{
+	padding: 0px;
+	margin: 0px;
+	margin-left: 2px;
+}
+
+tr.code
+{
+	padding: 0px;
+	margin: 0px;
+	vertical-align: bottom;
+}
+
+tr.code td
+{
+	padding: 0px;
+	margin: 0px;
+}
+
+td.code
+{
+	color: var(--codefg);
+	background-color: var(--codebg);
+}
+
+td.break
+{
+	min-width: 2em;
+	width: 2em;
+	font-size: 1.2ex;
+	text-align: center;
+	cursor: pointer;
+	border-left: solid 1px;
+	border-color: var(--codeseparator);
+}
+
+tr.code:first-child td.break
+{
+	border-top: solid 1px;
+	border-color: var(--codeseparator);
+}
+
+tr.code:last-child td.break
+{
+	border-bottom: solid 1px;
+	border-color: var(--codeseparator);
+}
+
+td.break.active::after
+{
+	content: "o";
+}
+
+
+td.cursor
+{
+	min-width: 2em;
+	width: 2em;
+	font-size: 1.2ex;
+	cursor: default;
+	border-left: solid 1px;
+	border-color: var(--codeseparator);
+}
+
+td.cursor.active::after
+{
+	content: "=>";
+}
+
+td.cursor.index::after
+{
+	content: "==";
+}
+
+tr.code:first-child td.cursor
+{
+	border-top: solid 1px;
+	border-color: var(--codeseparator);
+}
+
+tr.code:last-child td.cursor
+{
+	border-bottom: solid 1px;
+	border-color: var(--codeseparator);
+}
+
+pre.code
+{
+	display: inline-block;
+	padding: 0px;
+	margin: 0px;
+	padding-right: 3px;
+}
+
+span.indent
+{
+	width: 20px;
+	display: inline-block;
+}
+
+pre.code span.comment
+{
+	color: var(--codecomment);
+}
+
+pre.code span.instruction
+{
+	font-weight: bold;
+	color: var(--codeinstruction);
+}
+
+pre.code span.type
+{
+	color: var(--codetype);
+}
+
+pre.code span.constant
+{
+	color: var(--codeconstant);
+}
+
+pre.code span.keyword
+{
+	font-weight: bold;
+	color: var(--codekeyword);
+}
+
+pre.code span.operator
+{
+	color: var(--codeoperator);
+}
+
+pre.code span.marker
+{
+	color: var(--codemarker);
+}
+
+div.button.delete::after
+{
+	content: "x";
+}
+
+div.button.open::after
+{
+	content: ">";
+}
+
+div.button.cannot_open::after
+{
+	content: "-";
+}
+
+div.button.follow::after
+{
+	content: ">";
+}
+
+td.pointer
+{	
+	color: var(--memorypointerfg);
+	background-color: var(--memorypointerbg);
+}
+
+table.breakpoints td.text
+{
+	border: solid 1px;
+}
+
+div.form
+{
+	border: solid 1px;
+}
+
+div.form div.field
+{
+	padding-top: 2px;
+}
+
+div.form .label
+{
+	margin-right: 3px;
+}
+
+div.form .label::after
+{
+	content: ":";
+}
+
+div.form .invalid::after
+{
+	content: "!";
+}
+
+div.tool_bar_top
+{
+	height: 2ex;
+ 	font-size: 1.5ex;
+	padding: 0.25ex;
+	border-bottom: solid 1px var(--windowtoolbarborder);
+}
+
+div.tool_bar_bottom
+{
+	height: 2em;
+	border-top: solid 1px var(--windowtoolbarborder);
+	padding-top: 2px;
+	padding-left: 2px;
+}
+
+div.zone_bottom
+{
+	border-top: solid 1px var(--windowtoolbarborder);
+	padding-top: 2px;
+	padding-left: 2px;
+}

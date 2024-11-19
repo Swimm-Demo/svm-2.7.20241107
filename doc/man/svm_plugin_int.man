@@ -1,0 +1,87 @@
+.TH "Simple Virtual Machine - Official plugin int" 7 "2020-12-10"
+.SH SYNOPSIS
+.B svm_plugin_int
+\- Simple Virtual Machine official plugin for integer management. 
+.SH DESCRIPTION
+This plugin introduces extra features to manage built-in type
+.B INT
+values.
+.SH INVOKATION
+This plugin can be added to the Simple Virtual Machine using the directive:
+.nf
+
+PLUGIN "svmint.so"
+
+.fi
+.SH CONTENT
+.SS INSTRUCTION int.add ( INT INT + | PTR ) -> INT
+This instruction returns the sum of the parameters.
+If a pointer is provided, the memory zone shall contain initialised integers used to compute the sum, or a MEMORY interruption will be raised.
+.SS INSTRUCTION int.cmp INT [ < > = <> <= => ] INT -> BLN
+This instruction compares two integers and returns the result of the comparison.
+<> denotes the difference between two integers.
+.SS INSTRUCTION int.div INT INT -> INT
+This instruction returns the quotien between the two parameters.
+The instruction raises a NUMERIC interruption when the divider is zero.
+.SS INSTRUCTION int.mod INT INT -> INT
+This instruction returns the remainder between the two parameters.
+The instruction raises a NUMERIC interruption when the divider is zero.
+.SS INSTRUCTION int.mul ( INT INT + | PTR ) -> INT
+This instruction returns the product of the parameters.
+If a pointer is provided, the memory zone shall contain initialised integers used to compute the product, or a MEMORY interruption will be raised.
+.SS INSTRUCTION int.gcd ( INT INT + | PTR ) -> INT
+This instruction returns the greatest common divisor of the parameters.
+If a pointer is provided, the memory zone shall contain initialised integers used to compute the gcd, or a MEMORY interruption will be raised.
+.SS INSTRUCTION int.lcm ( INT INT + | PTR ) -> INT
+This instruction returns the least common multiple of the parameters.
+If a pointer is provided, the memory zone shall contain initialised integers used to compute the lcm, or a MEMORY interruption will be raised.
+.SS INSTRUCTION int.parse STR -> INT
+This instruction transforms a string into an integer.
+If the string does not contain only an integer, a NUMERIC interruption is raised.
+When the string starts with a 0, an octal interpretation is performed, when the string starts with 0x, an hexadecimal interpretation is performed.
+.SS INSTRUCTION int.print INT ( [ 'OCT' 'DEC' 'HEX' ] INT ) ? -> STR
+This instruction transforms an integer into a string.
+An optional format can be specified: a base (
+.B OCT
+for octal output with a 0 prefix,
+.B DEC
+for decimal output,
+.B HEX
+for hexadecimal output with a 0x prefix) and a text size, prefix excluded.
+.SS INSTRUCTION int.rand 'DICE' ? INT : limit -> INT
+This instruction returns a pseudo random integer between 0 and the limit minus one.
+When the keyword
+.B DICE
+is specified, one is added to the random number.
+.SS INSTRUCTION int.sub INT INT -> INT
+This instruction returns the difference between the two parameters.
+.SS Integer functions
+.SS FUNCTION int.add ( INT INT + | PTR ) -> INT 
+This function does the same operation as the corresponding instruction.
+.SS FUNCTION int.sub INT INT -> INT 
+This function does the same operation as the corresponding instruction.
+.SS FUNCTION int.mul ( INT INT + | PTR ) -> INT 
+This function does the same operation as the corresponding instruction.
+.SS FUNCTION int.div INT INT -> INT 
+This function does the same operation as the corresponding instruction.
+.SS FUNCTION int.mod INT INT -> INT 
+This function does the same operation as the corresponding instruction.
+.SS FUNCTION int.gcd ( INT INT + | PTR ) -> INT
+This function does the same operation as the corresponding instruction.
+.SS FUNCTION int.lcm ( INT INT + | PTR ) -> INT
+This function does the same operation as the corresponding instruction.
+.SS FUNCTION int.cmp INT [ < > = <> <= => ] INT -> BLN 
+This function does the same operation as the corresponding instruction.
+.SS FUNCTION int.parse STR -> INT 
+This function does the same operation as the corresponding instruction.
+.SS FUNCTION int.print INT ( [ 'OCT' 'DEC' 'HEX' ] INT ) ? -> STR 
+This function does the same operation as the corresponding instruction.
+.SS FUNCTION int.format INT INT:size STR:padding [ 'OCT' 'DEC' 'HEX' ] ? -> STR
+This function renders the integer within a string.
+The returned string has the specified length, padded left with the given string.
+The integer is rendered in the specified base (DEC by default) without the base prefix.
+.SH SEE ALSO
+.BR svm (1)
+for help on the Simple Virtual Machine.
+.SH AUTHOR
+The Simple Virtual Machine is designed, implemented and maintained by Julien Bruguier <===EMAILCONTACT===>.

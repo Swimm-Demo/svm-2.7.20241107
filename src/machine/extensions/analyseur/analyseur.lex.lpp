@@ -1,0 +1,100 @@
+/*
+ * Simple Virtual Machine - A versatile and robust architecture to
+ * easily write applications.
+ * Copyright (C) 2021  Julien BRUGUIER
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+%{
+#include <src/global/global.h>
+#include <src/machine/extensions/analyseur/includes.h>
+
+#define YY_USER_ACTION yylloc->first_line = yylloc->last_line;
+
+%}
+
+%option yy_scan_string
+%option nounput
+%option reentrant
+%option bison-bridge
+%option bison-locations
+%option noyywrap
+
+%s ISOLATION
+
+%%
+(0|[1-9][0-9]{0,17})				{ yylval->entier = ::atoi(yytext); return ENTIER; }
+[a-z][a-z0-9_]*					{ yylval->chaine = std::string(yytext,yyleng); return IDENTIFIANT; }
+PLUGIN						{ return PLUGIN; }
+USE						{ return USE; }
+DEFINE						{ return DEFINE; }
+TYPE						{ return TYPE; }
+INSTRUCTION					{ return INSTRUCTION; }
+STRUCT						{ return STRUCT; }
+FUNCTION					{ return FUNCTION; }
+INTERRUPTION					{ return INTERRUPTION; }
+SCHEDULER					{ return SCHEDULER; }
+SEQUENCER					{ return SEQUENCER; }
+OPTION						{ return OPTION; }
+ARGUMENT					{ return ARGUMENT; }
+ARGUMENTS					{ return ARGUMENTS; }
+SYSTEM						{ return SYSTEM; }
+WAITING						{ return WAITING; }
+OVERRIDE					{ return OVERRIDE; }
+->						{ return RETURN; }
+\.						{ return POINT; }
+MUTABLE						{ return MUTABLE; }
+VALUE						{ return VALUE; }
+INT 						{ return INT; }
+STR 						{ return STR; }
+BLN 						{ return BLN; }
+PTR 						{ return PTR; }
+LIB 						{ return LIB; }
+SYM 						{ return SYM; }
+PEP 						{ return PEP; }
+IRQ 						{ return IRQ; }
+AUTO						{ return AUTO; }
+MARKER						{ return MARKER; }
+\<						{ return INFERIEUR; }
+>						{ return SUPERIEUR; }
+\<\<						{ return INFERIEUR_INFERIEUR; }
+>>						{ return SUPERIEUR_SUPERIEUR; }
+\<>						{ return INFERIEUR_SUPERIEUR; }
+"{"						{ return DEBUT_ACCOLADE; }
+"}"						{ return FIN_ACCOLADE; }
+,						{ return VIRGULE; }
+;						{ return POINT_VIRGULE; }
+=						{ return EGAL; }
+\<=						{ return INFERIEUR_OU_EGAL; }
+=>						{ return SUPERIEUR_OU_EGAL; }
+KEYWORD						{ return KEYWORD; }
+VARIABLE					{ return VARIABLE; }
+\'[A-Z][A-Z_0-9]*\'				{ std::string token(yytext,yyleng); yylval->chaine = token.substr(1,token.size()-2); return MOT_CLEF; }
+\$						{ return STRUCTURE; }
+"("						{ return DEBUT_PARENTHESE; }
+")"						{ return FIN_PARENTHESE; }
+"["						{ return DEBUT_CROCHET; }
+"]"						{ return FIN_CROCHET; }
+\+						{ return PLUS; }
+\*						{ return FOIS; }
+\?						{ return POINT_INTERROGATION; }
+\|						{ return ALTERNATIVE; }
+:						{ return DEUX_POINTS; }
+-[a-zA-Z0-9]					{ std::string token(yytext,yyleng); yylval->chaine = token.substr(1); return VALEUR_OPTION; }
+[ \t]						{ }
+#[^#\n]*#?					{ return FIN_LIGNE; }
+\r?\n						{ ++yylloc->last_line; /* nouvelle ligne */ BEGIN(INITIAL); return FIN_LIGNE; }
+.						{ return _INVALIDE_; }
+%%

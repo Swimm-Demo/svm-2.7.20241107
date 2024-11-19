@@ -1,0 +1,535 @@
+/*
+ * Simple Virtual Machine - A versatile and robust architecture to
+ * easily write applications.
+ * Copyright (C) 2021  Julien BRUGUIER
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+%{
+#include <src/global/global.h>
+#define YYDEBUG 0
+#include <src/demarrage/lanceur/analyseur/includes.h>
+
+extern int demarragelanceuranalyseurerror(YYLTYPE *llocp, void *scanner, SVM::Demarrage::Lanceur::LanceurSP& lanceur, std::string mesg);
+extern int demarragelanceuranalyseurlex(YYSTYPE *lvalp, YYLTYPE *llocp, void *scanner);
+extern int demarragelanceuranalyseurlex_init(void *scanner);
+extern int demarragelanceuranalyseurlex_destroy(void *scanner);
+
+%}
+
+%locations
+%define api.pure full
+%define api.value.type { struct ValeurLanceur }
+%param { void *scanner }
+
+%parse-param { SVM::Demarrage::Lanceur::LanceurSP& lanceur }
+
+%initial-action { 
+#if YYDEBUG==1
+	demarragelanceuranalyseurdebug=1;
+#endif
+}
+%code requires
+{
+
+struct ValeurLanceur
+{
+	size_t entier;
+	std::string chaine;
+	bool booleen;
+	SHARED_PTR(std::string) chaine_sp;
+	SVM::Demarrage::Lanceur::TypeOptions type_options;
+	SVM::Demarrage::Lanceur::HistoriqueSP historique;
+	SVM::Demarrage::Lanceur::SelecteurSP selecteur;
+	SVM::Machine::CodeSP code;
+	SVM::Machine::Element::Valeur::PointEntreeExtensionSP nom_extension;
+	std::vector<SVM::Demarrage::Lanceur::SelecteurSP> memoire;
+	SVM::Demarrage::Lanceur::DebugueurSP debugueur;
+	SVM::Demarrage::Lanceur::PerformanceSP performance;
+	SVM::Demarrage::Lanceur::ParametreExtensionSP parametre_extension;
+	std::vector<SVM::Demarrage::Lanceur::ParametreExtensionOption> liste_option_extension;
+	std::vector<SVM::Demarrage::Lanceur::ParametreExtensionSP> liste_parametre_extension;
+	std::pair<std::vector<SVM::Demarrage::Lanceur::ParametreExtensionOption>, std::vector<SVM::Demarrage::Lanceur::ParametreExtensionSP> > options_arguments_extension;
+};
+
+#   define YYCOPY(Dst, Src, Count)              \
+      do                                        \
+        {                                       \
+          YYSIZE_T yyi;                         \
+          for (yyi = 0; yyi < (Count); yyi++)   \
+            (Dst)[yyi] = (Src)[yyi];            \
+        }                                       \
+      while (0)
+
+
+}
+
+/*
+%destructor { } <*>
+*/
+
+%token _INVALIDE_
+%token<chaine> IDENTIFIANT CHAINE_MONOLIGNE VALEUR_OPTION LIGNE
+%token<entier> ENTIER
+%token DEBUGUEUR PERFORMANCE LOG PLUGIN_FILE LOCAL_PLUGIN OPTION FLAG MULTIPLE STR INT HELP ARGUMENT ARGUMENTS PROCESS CODE INCLUDE_FILE SERVER QUIET END TOKEN_MEMORY SCHEDULER SEQUENCER AUTOTERMINATED POINT DESCRIPTION INLINE NETWORK STYLE CLIENTS SECURITE SEPARATEUR
+
+%type<type_options> type_option
+%type<type_options> type_argument
+%type<chaine_sp> aide_optionelle
+%type<parametre_extension> argument_extension
+%type<liste_option_extension> liste_options_extension
+%type<liste_parametre_extension> liste_arguments_extension
+%type<options_arguments_extension> parametres_extension
+%type<nom_extension> nom_extension
+%type<nom_extension> ordonanceur_optionel ordonanceur
+%type<nom_extension> sequenceur_optionel sequenceur
+%type<code> code
+%type<code> source_code
+%type<memoire> memoire_optionelle memoire liste_selecteurs
+%type<chaine> lignes
+%type<selecteur> selecteur
+%type<booleen> multiple_optionel calme_optionel terminaison_automatique_optionnelle
+%type<historique> historique historique_terminal historique_fichier historique_serveur
+%type<debugueur> debugueur debugueur_liste_options
+%type<performance> performance
+
+%start lanceur
+%%
+lanceur: description_optionel historique_optionel debugueur_optionel performance_optionel liste_extensions liste_options liste_arguments arguments_supplementaires_optionel liste_processus
+;
+
+description_optionel:
+| description
+;
+
+description: DESCRIPTION lignes
+{
+	lanceur->description($2);
+}
+;
+
+lignes:
+{
+	$$ = std::string();
+}
+| lignes LIGNE
+{
+	$$ = $1 + $2;
+}
+;
+
+debugueur_optionel:
+{
+	lanceur->debugueur(std::make_shared<SVM::Demarrage::Lanceur::Debugueur>(lanceur->_source));
+}
+| debugueur
+{
+	lanceur->debugueur($1);
+}
+;
+
+debugueur: DEBUGUEUR CHAINE_MONOLIGNE debugueur_liste_options
+{
+	$$ = $3;
+	$$->_titre = $2;
+}
+;
+
+debugueur_liste_options:
+{
+	$$ = std::make_shared<SVM::Demarrage::Lanceur::Debugueur>(lanceur->_source);
+}
+| debugueur_liste_options NETWORK CHAINE_MONOLIGNE
+{
+	$$ = $1;
+	if($$->_aip)
+	{
+		::demarragelanceuranalyseurerror(&@$,scanner,lanceur,"Duplicate network option");
+		return 1;
+	}
+	$$->_aip = true;
+	$$->_ip = $3;
+}
+| debugueur_liste_options STYLE CHAINE_MONOLIGNE
+{
+	$$ = $1;
+	if($$->_astyle)
+	{
+		::demarragelanceuranalyseurerror(&@$,scanner,lanceur,"Duplicate style option");
+		return 1;
+	}
+	$$->_astyle = true;
+	$$->_style = $3;
+}
+| debugueur_liste_options CLIENTS ENTIER
+{
+	$$ = $1;
+	if($$->_astyle)
+	{
+		::demarragelanceuranalyseurerror(&@$,scanner,lanceur,"Duplicate style option");
+		return 1;
+	}
+	$$->_astyle = true;
+	$$->_clients = $3;
+}
+| debugueur_liste_options SECURITE ENTIER
+{
+	$$ = $1;
+	if($$->_asecurite)
+	{
+		::demarragelanceuranalyseurerror(&@$,scanner,lanceur,"Duplicate security option");
+		return 1;
+	}
+	$$->_asecurite = true;
+	$$->_securite = $3;
+}
+| debugueur_liste_options historique
+{
+	$$ = $1;
+	if($$->_ahistorique)
+	{
+		::demarragelanceuranalyseurerror(&@$,scanner,lanceur,"Duplicate log option");
+		return 1;
+	}
+	$$->_ahistorique = true;
+	$$->_historique = $2;
+}
+;
+
+performance_optionel:
+{
+	lanceur->performance(std::make_shared<SVM::Demarrage::Lanceur::Performance>());
+}
+| performance
+{
+	lanceur->performance($1);
+}
+;
+
+performance:	PERFORMANCE historique
+{
+	$$ = std::make_shared<SVM::Demarrage::Lanceur::Performance>($2);
+}
+;
+
+historique_optionel:
+|	historique
+{
+	lanceur->historique($1);
+}
+;
+
+historique: historique_terminal
+{
+	$$ = $1;
+}
+| historique_fichier
+{
+	$$ = $1;
+}
+| historique_serveur
+{
+	$$ = $1;
+}
+;
+
+historique_terminal: LOG calme_optionel
+{
+	$$ = std::make_shared<SVM::Demarrage::Lanceur::HistoriqueTerminal>($2);
+};
+
+historique_fichier: LOG INCLUDE_FILE CHAINE_MONOLIGNE calme_optionel
+{
+	if($3.empty())
+	{
+		::demarragelanceuranalyseurerror(&@$,scanner,lanceur,"Invalid log file name");
+		return 1;
+	}
+	$$ = std::make_shared<SVM::Demarrage::Lanceur::HistoriqueFichier>($3,$4);
+}
+;
+
+historique_serveur: LOG SERVER CHAINE_MONOLIGNE CHAINE_MONOLIGNE calme_optionel
+{
+	if($3.empty())
+	{
+		::demarragelanceuranalyseurerror(&@$,scanner,lanceur,"Invalid server IP address");
+		return 1;
+	}
+	if($4.empty())
+	{
+		::demarragelanceuranalyseurerror(&@$,scanner,lanceur,"Invalid server port");
+		return 1;
+	}
+	$$ = std::make_shared<SVM::Demarrage::Lanceur::HistoriqueServeur>($3,$4,$5);
+}
+;
+
+liste_extensions:
+| liste_extensions extension
+;
+
+extension: PLUGIN_FILE CHAINE_MONOLIGNE parametres_extension
+{
+	lanceur->extension($2,SVM::Demarrage::Lanceur::Lanceur::TypeExtension::SYSTEME,$3.first,$3.second);
+}
+| LOCAL_PLUGIN PLUGIN_FILE CHAINE_MONOLIGNE parametres_extension
+{
+	lanceur->extension($3,SVM::Demarrage::Lanceur::Lanceur::TypeExtension::LOCAL,$4.first,$4.second);
+}
+;
+
+parametres_extension: liste_options_extension SEPARATEUR liste_arguments_extension
+{
+	$$ = std::make_pair($1,$3);
+}
+| liste_options_extension
+{
+	$$ = std::make_pair($1,std::vector<SVM::Demarrage::Lanceur::ParametreExtensionSP>());
+}
+;
+
+liste_options_extension:
+{
+	$$ = {};
+}
+|	liste_options_extension VALEUR_OPTION
+{
+	$$ = $1;
+	$$.emplace_back($2);
+}
+|	liste_options_extension VALEUR_OPTION argument_extension
+{
+	$$ = $1;
+	$$.emplace_back($2,$3);
+}
+;
+
+liste_arguments_extension:
+{
+	$$ = {};
+}
+|	liste_arguments_extension argument_extension
+{
+	$$ = $1;
+	$$.push_back($2);
+}
+;
+
+argument_extension:	ENTIER
+{
+	$$ = std::make_shared<SVM::Demarrage::Lanceur::ParametreExtensionEntier>($1);
+}
+|	CHAINE_MONOLIGNE
+{
+	$$ = std::make_shared<SVM::Demarrage::Lanceur::ParametreExtensionChaine>($1);
+}
+;
+
+liste_options:
+| liste_options option
+;
+
+option: OPTION VALEUR_OPTION multiple_optionel type_option IDENTIFIANT aide_optionelle
+{
+	lanceur->option(SVM::Demarrage::Lanceur::Option($2,$3,$4,$5,$6));
+}
+;
+
+multiple_optionel:
+{
+	$$ = false;
+}
+| MULTIPLE
+{
+	$$ = true;
+}
+
+type_option: FLAG
+{
+	$$ = SVM::Demarrage::Lanceur::TypeOptions::DRAPEAU;
+}
+| type_argument
+{
+	$$ = $1;
+}
+;
+
+type_argument: STR
+{
+	$$ = SVM::Demarrage::Lanceur::TypeOptions::CHAINE;
+}
+| INT
+{
+	$$ = SVM::Demarrage::Lanceur::TypeOptions::ENTIER;
+}
+;
+
+aide_optionelle:
+{
+	$$ = SHARED_PTR(std::string)();
+}
+| HELP CHAINE_MONOLIGNE
+{
+	$$ = std::make_shared<std::string>($2);
+}
+
+liste_arguments:
+| liste_arguments argument
+;
+
+argument: ARGUMENT type_argument IDENTIFIANT aide_optionelle
+{
+	lanceur->argument(SVM::Demarrage::Lanceur::Argument($2,$3,$4));
+}
+;
+
+arguments_supplementaires_optionel:
+| arguments_supplementaires
+;
+
+arguments_supplementaires: ARGUMENTS IDENTIFIANT
+{
+	lanceur->arguments_supplementaires($2);
+}
+;
+
+liste_processus: processus
+| liste_processus processus
+;
+
+processus: PROCESS CHAINE_MONOLIGNE code memoire_optionelle ordonanceur_optionel sequenceur_optionel terminaison_automatique_optionnelle END
+{
+	lanceur->processus(SVM::Demarrage::Lanceur::Processus($2,$3,$4,$5,$6,$7));
+}
+;
+
+code: CODE CHAINE_MONOLIGNE source_code
+{
+	$$ = $3;
+	$$->nom($2);
+}
+;
+
+source_code: INCLUDE_FILE CHAINE_MONOLIGNE
+{
+	$$ = std::make_shared<SVM::Machine::Fichier>($2);
+}
+| INLINE lignes
+{
+	$$ = std::make_shared<SVM::Machine::Texte>($2);
+}
+;
+
+memoire_optionelle:
+{
+	$$ = {};
+}
+| memoire
+{
+	$$ = $1;
+}
+;
+
+memoire: TOKEN_MEMORY liste_selecteurs
+{
+	$$ = $2;
+}
+;
+
+liste_selecteurs: selecteur
+{
+	$$ = std::vector<SVM::Demarrage::Lanceur::SelecteurSP>();
+	$$.push_back($1);
+}
+| liste_selecteurs selecteur
+{
+	$$ = $1;
+	$$.push_back($2);
+}
+;
+
+selecteur: IDENTIFIANT
+{
+	$$ = std::make_shared<SVM::Demarrage::Lanceur::SelecteurAlias>($1);
+}
+| CHAINE_MONOLIGNE
+{
+	$$ = std::make_shared<SVM::Demarrage::Lanceur::SelecteurGroupe>($1);
+};
+
+ordonanceur_optionel:
+{
+	$$ = SVM::Machine::Element::Valeur::PointEntreeExtensionSP();
+}
+| ordonanceur
+{
+	$$ = $1;
+}
+;
+
+ordonanceur: SCHEDULER nom_extension
+{
+	$$ = $2;
+}
+;
+
+sequenceur_optionel:
+{
+	$$ = SVM::Machine::Element::Valeur::PointEntreeExtensionSP();
+}
+| sequenceur
+{
+	$$ = $1;
+}
+;
+
+sequenceur: SEQUENCER nom_extension
+{
+	$$ = $2;
+}
+;
+
+terminaison_automatique_optionnelle:
+{
+	$$ = false;
+}
+|	AUTOTERMINATED
+{
+	$$ = true;
+}
+
+nom_extension: IDENTIFIANT POINT IDENTIFIANT
+{
+	$$ = std::make_shared<SVM::Machine::Element::Valeur::PointEntreeExtension>($1,$3);
+}
+;
+
+calme_optionel:
+{
+	$$ = false;
+}
+|	QUIET
+{
+	$$ = true;
+}
+;
+
+%%
+int demarragelanceuranalyseurerror(YYLTYPE *llocp, void *scanner, SVM::Demarrage::Lanceur::LanceurSP& lanceur, std::string mesg)
+{
+	lanceur->erreur(SVM::Demarrage::Lanceur::Erreur(llocp->first_line,mesg));
+	return 1;
+}

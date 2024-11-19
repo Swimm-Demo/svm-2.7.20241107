@@ -1,0 +1,49 @@
+/*
+ * Simple Virtual Machine - A versatile and robust architecture to
+ * easily write applications.
+ * Copyright (C) 2021  Julien BRUGUIER
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+%{
+#include <src/global/global.h>
+#include <src/machine/debugueur/analyseur/includes.h>
+
+#define YY_USER_ACTION yylloc->first_line = yylloc->last_line = yylineno;
+
+%}
+
+%option nounput
+%option reentrant
+%option bison-bridge
+%option bison-locations
+%option noyywrap
+
+%%
+(0|-?[1-9][0-9]*)					{ yylval->entier = ::atoi(yytext); return ENTIER; }
+\"([^\\"\n]|\\.)*\"					{ std::string token(yytext,yyleng); yylval->chaine = SVM::Global::Chaine::desechappe(token.substr(1,token.size()-2)); return CHAINE; }
+\"([^\\"\n]|\\.)*\r?\n					{ return _INVALIDE_; }
+true							{ return VRAI; }
+false							{ return FAUX; }
+:							{ return DEUX_POINTS; }
+,							{ return VIRGULE; }
+\{							{ return ACCOLADE_OUVRANTE; }
+\}							{ return ACCOLADE_FERMANTE; }
+"["							{ return CROCHET_OUVRANT; }
+\]							{ return CROCHET_FERMANT; }
+[ \t]							{ }
+\r?\n							{ ++yylineno; }
+.							{ return _INVALIDE_; }
+%%

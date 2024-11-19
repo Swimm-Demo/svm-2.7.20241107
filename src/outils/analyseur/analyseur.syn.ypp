@@ -1,0 +1,1023 @@
+/*
+ * Simple Virtual Machine - A versatile and robust architecture to
+ * easily write applications.
+ * Copyright (C) 2021  Julien BRUGUIER
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+%{
+#include <src/global/global.h>
+#define YYDEBUG 0
+#include <src/outils/analyseur/includes.h>
+
+
+extern int outilssvmpluginanalyseurerror(YYLTYPE *llocp, void *scanner, SVM::Outils::ExtensionSP& extension, SVM::Outils::ErreurSP& erreur, std::string mesg);
+extern int outilssvmpluginanalyseurlex(YYSTYPE *lvalp, YYLTYPE *llocp, void *scanner);
+extern int outilssvmpluginanalyseurlex_init(void *scanner);
+extern int outilssvmpluginanalyseurlex_destroy(void *scanner);
+
+namespace SVM_Programme = SVM::Machine::Element::Programme;
+namespace SVM_Instruction = SVM::Machine::Element::Processeur::Instruction;
+%}
+
+%locations
+%define api.pure full
+%define api.value.type { struct ValeurGenerationExtension }
+%param { void *scanner }
+
+%parse-param { SVM::Outils::ExtensionSP& extension } 
+%parse-param { SVM::Outils::ErreurSP& erreur } 
+
+%initial-action { 
+#if YYDEBUG==1
+	outilssvmpluginanalyseurdebug=1;
+#endif
+}
+%code requires
+{
+
+struct ValeurGenerationExtension
+{
+	long int entier;
+	std::string chaine;
+	bool booleen;
+	SVM::Outils::FonctionSP fonction;
+	SHARED_PTR(std::string) chaine_facultative;
+	SVM::Outils::Fonction::Option option;
+};
+
+#   define YYCOPY(Dst, Src, Count)              \
+      do                                        \
+        {                                       \
+          YYSIZE_T yyi;                         \
+          for (yyi = 0; yyi < (Count); yyi++)   \
+            (Dst)[yyi] = (Src)[yyi];            \
+        }                                       \
+      while (0)
+
+#define NOUVELLE_DIRECTIVE(nom,clef,valeur,position,texte) \
+	if(extension->nouvelle_directive(#clef,valeur,texte.first_line,texte.last_line)) \
+	{ \
+		return ::outilssvmpluginanalyseurerror(&position,scanner,extension,erreur,std::string("duplicate directive ")+#nom); \
+	}
+
+}
+
+/*
+%destructor { } <*>
+*/
+
+%token _INVALIDE_
+%token<chaine> IDENTIFIANT
+%token<chaine> CHAINE
+%token<chaine> TEXTE
+%token<chaine> PARAMETRES
+%token<chaine> VALEUR_OPTION
+%token TYPE_ENTIER TYPE_CHAINE TYPE_BOOLEEN
+%token PLUGIN USE DEFINE
+%token TYPE STRUCT INSTRUCTION FUNCTION INTERRUPTION SEQUENCER SCHEDULER OPTION ARGUMENT ARGUMENTS
+%token WAITING SYSTEM OVERRIDE
+%token ATTACH AUTHOR CHANGELOG CHECKS CODE COMMENT COMPARE COMPILE CONSTANT COPY CREATE CURRENT DATE DEFAULT DELETE DESCRIPTION DETACH EXAMPLE EXTRA_FILE FINALISATION HELP INCLUDES INITIALISATION LANG LICENSE LINK MAINTAINER NEWS NOTIFICATION OBJECT PATCH PLUGIN_VERSION PRINT README SCHEDULE SEEALSO SHELL STARTUP STRING SYNOPSIS TEST TITLE USAGE
+%token POINT DEUX_POINTS FIN_LIGNE
+
+%type<chaine> citation
+%type<chaine> point_entree_extension
+%type<chaine> prototype prototype_type prototype_struct prototype_interruption prototype_sequenceur prototype_ordonanceur prototype_instruction prototype_fonction prototype_option prototype_argument prototype_arguments
+%type<chaine> drapeaux_instruction
+%type<fonction> fonction_create fonction_delete fonction_copy_facultative fonction_copy fonction_compare_facultative fonction_compare fonction_constant_facultative fonction_constant fonction_print_facultative fonction_print fonction_current fonction_schedule fonction_notification_facultative fonction_notification fonction_attach fonction_detach 
+%type<chaine> aide
+%type<chaine> type
+%type<chaine_facultative> aide_facultative
+%type<option> options_defaut /*options_objet*/ options_objet_defaut options_chaine_defaut
+%type<chaine> type_option type_argument
+
+%start extension
+
+%%
+
+extension: nom_extension directives dependances definitions
+{
+}
+;
+
+
+nom_extension: PLUGIN IDENTIFIANT fin_ligne
+{
+	extension->nom($2);
+}
+;
+
+directives: liste_directives 
+{
+}
+;
+
+liste_directives:
+{
+}
+|	liste_directives directive
+{
+}
+;
+
+directive:	langage
+{
+}
+|	version
+{
+}
+|	auteur
+{
+}
+|	mainteneur
+{
+}
+|	news
+{
+}
+|	readme
+{
+}
+|	changelog
+{
+}
+|	licence
+{
+}
+|	usage
+{
+}
+|	titre
+{
+}
+|	date
+{
+}
+|	synopsis
+{
+}
+|	description
+{
+}
+|	example
+{
+}
+|	voir_aussi
+{
+}
+|	tests
+{
+}
+|	compilation
+{
+}
+|	lien
+{
+}
+|	inclusions
+{
+}
+|	initialisation
+{
+}
+|	startup
+{
+}
+|	finalisation
+{
+}
+|	code
+{
+}	
+|	fichier
+{
+}
+|	test
+{
+}
+|	initialisation_test
+{
+}
+|	finalisation_test
+{
+}
+|	correction
+{
+}
+|	shell
+{
+}	
+|	comment
+{
+}
+;
+
+langage:	LANG DEUX_POINTS CHAINE fin_ligne
+{
+	NOUVELLE_DIRECTIVE(lang,langage,$3,@$,@3);
+}
+;
+
+version:	PLUGIN_VERSION DEUX_POINTS CHAINE fin_ligne
+{
+	NOUVELLE_DIRECTIVE(version,version,$3,@$,@3);
+}
+;
+
+auteur:	AUTHOR DEUX_POINTS CHAINE fin_ligne
+{
+	NOUVELLE_DIRECTIVE(author,auteur,$3,@$,@3);
+}
+;
+
+mainteneur:	MAINTAINER DEUX_POINTS CHAINE fin_ligne
+{
+	NOUVELLE_DIRECTIVE(maintainer,mainteneur,$3,@$,@3);
+}
+;
+
+news:	 NEWS DEUX_POINTS citation fin_ligne
+{
+	NOUVELLE_DIRECTIVE(news,nouveautes,$3,@$,@3);
+}
+;
+
+readme:	 README DEUX_POINTS citation fin_ligne
+{
+	NOUVELLE_DIRECTIVE(readme,lisez_moi,$3,@$,@3);
+}
+;
+
+changelog:	 CHANGELOG DEUX_POINTS citation fin_ligne
+{
+	NOUVELLE_DIRECTIVE(changelog,historique,$3,@$,@3);
+}
+;
+
+licence:	 LICENSE DEUX_POINTS citation fin_ligne
+{
+	NOUVELLE_DIRECTIVE(license,licence_longue,$3,@$,@3);
+}
+;
+
+usage:	 USAGE DEUX_POINTS citation fin_ligne
+{
+	NOUVELLE_DIRECTIVE(usage,licence_courte,$3,@$,@3);
+}
+;
+
+tests:	CHECKS DEUX_POINTS fin_ligne_facultative TEXTE fin_ligne
+{
+	NOUVELLE_DIRECTIVE(checks,tests,$4,@$,@4);
+}
+;
+
+compilation:	COMPILE DEUX_POINTS CHAINE fin_ligne
+{
+	NOUVELLE_DIRECTIVE(compile,options_compilation,$3,@$,@3);
+}
+;
+
+lien:	LINK DEUX_POINTS CHAINE fin_ligne
+{
+	NOUVELLE_DIRECTIVE(link,options_lien,$3,@$,@3);
+}
+;
+
+
+titre: TITLE DEUX_POINTS CHAINE fin_ligne
+{
+	NOUVELLE_DIRECTIVE(title,titre,$3,@$,@3);
+}
+;
+
+date: DATE DEUX_POINTS CHAINE fin_ligne
+{
+	NOUVELLE_DIRECTIVE(date,date,$3,@$,@3);
+}
+;
+
+synopsis: SYNOPSIS DEUX_POINTS citation fin_ligne
+{
+	NOUVELLE_DIRECTIVE(synopsis,synopsis,$3,@$,@3);
+}
+;
+
+description: DESCRIPTION DEUX_POINTS fin_ligne_facultative TEXTE fin_ligne
+{
+	NOUVELLE_DIRECTIVE(description,description,$4,@$,@4);
+}
+;
+
+voir_aussi:	SEEALSO DEUX_POINTS citation fin_ligne
+{
+	NOUVELLE_DIRECTIVE(seealso,voir_aussi,$3,@$,@3);
+}
+;
+
+example: EXAMPLE DEUX_POINTS CHAINE fin_ligne_facultative TEXTE fin_ligne
+{
+	extension->nouvel_exemple($3,$5);
+}
+;
+
+fichier: EXTRA_FILE type DEUX_POINTS CHAINE fin_ligne_facultative TEXTE fin_ligne
+{
+	if(not extension->nouveau_fichier($4,$6,$2))
+	{
+		return ::outilssvmpluginanalyseurerror(&@4,scanner,extension,erreur,std::string("duplicate file ")+$4);
+	}
+}
+;
+
+type:
+{
+	$$ = "";
+}
+|	IDENTIFIANT
+{
+	$$ = $1;
+}
+;
+
+test: TEST DEUX_POINTS CHAINE fin_ligne_facultative TEXTE fin_ligne
+{
+	for(const auto &c: $3)
+	{
+		if(not (((c>='a') and (c<='z')) or ((c>='A') and (c<='Z')) or ((c>='0' and c<='9') or (c=='_'))))
+		{
+			return ::outilssvmpluginanalyseurerror(&@3,scanner,extension,erreur,std::string("invalid test name ")+$3);
+		}
+	}
+	if(not extension->nouveau_test($3,"",$5))
+	{
+		return ::outilssvmpluginanalyseurerror(&@3,scanner,extension,erreur,std::string("duplicate test ")+$3);
+	}
+}
+|	TEST DEUX_POINTS CHAINE fin_ligne_facultative TEXTE fin_ligne TEXTE fin_ligne
+{
+	for(const auto &c: $3)
+	{
+		if(not (((c>='a') and (c<='z')) or ((c>='A') and (c<='Z')) or ((c>='0' and c<='9') or (c=='_'))))
+		{
+			return ::outilssvmpluginanalyseurerror(&@3,scanner,extension,erreur,std::string("invalid test name ")+$3);
+		}
+	}
+	for(const auto &c: $5)
+	{
+		if(c=='\n')
+		{
+			return ::outilssvmpluginanalyseurerror(&@3,scanner,extension,erreur,std::string("invalid command line for test ")+$3);
+		}
+	}
+	if(not extension->nouveau_test($3,$5,$7))
+	{
+		return ::outilssvmpluginanalyseurerror(&@3,scanner,extension,erreur,std::string("duplicate test ")+$3);
+	}
+}
+;
+
+initialisation_test: TEST DEUX_POINTS INITIALISATION fin_ligne_facultative TEXTE fin_ligne
+{
+	NOUVELLE_DIRECTIVE(test: initialisation,initialisation_test,$5,@$,@5);
+}
+;
+
+finalisation_test: TEST DEUX_POINTS FINALISATION fin_ligne_facultative TEXTE fin_ligne
+{
+	NOUVELLE_DIRECTIVE(test: finalisation,finalisation_test,$5,@$,@5);
+}
+;
+
+correction: PATCH DEUX_POINTS CHAINE fin_ligne_facultative TEXTE fin_ligne
+{
+	if(not extension->nouvelle_correction($3,$5))
+	{
+		return ::outilssvmpluginanalyseurerror(&@3,scanner,extension,erreur,std::string("duplicate patch ")+$3);
+	}
+}
+;
+
+initialisation:	INITIALISATION DEUX_POINTS fin_ligne_facultative TEXTE fin_ligne
+{
+	NOUVELLE_DIRECTIVE(initialisation,initialisation,$4,@$,@4);
+}
+;
+
+startup:	STARTUP DEUX_POINTS fin_ligne_facultative TEXTE fin_ligne
+{
+	NOUVELLE_DIRECTIVE(startup,startup,$4,@$,@4);
+}
+;
+
+finalisation:	FINALISATION DEUX_POINTS fin_ligne_facultative TEXTE fin_ligne
+{
+	NOUVELLE_DIRECTIVE(finalisation,finalisation,$4,@$,@4);
+}
+;
+
+inclusions:	INCLUDES DEUX_POINTS fin_ligne_facultative TEXTE fin_ligne
+{
+	NOUVELLE_DIRECTIVE(includes,inclusions,$4,@$,@4);
+}
+;
+
+code:	CODE DEUX_POINTS fin_ligne_facultative TEXTE fin_ligne
+{
+	NOUVELLE_DIRECTIVE(code,code,$4,@$,@4);
+}
+;
+
+shell:	SHELL DEUX_POINTS fin_ligne_facultative TEXTE fin_ligne
+{
+	NOUVELLE_DIRECTIVE(shell,shell,$4,@$,@4);
+}
+;
+
+comment:	COMMENT IDENTIFIANT DEUX_POINTS fin_ligne_facultative CHAINE CHAINE CHAINE fin_ligne
+{
+	extension->nouveau_commentaire($2,$5,$6,$7);
+}
+;
+
+dependances:
+{
+}
+|	USE fin_ligne liste_dependances
+{
+}
+;
+
+liste_dependances: dependance
+{
+}
+|	liste_dependances dependance
+{
+}
+;
+
+dependance: prototype aide_facultative
+{
+	auto d = std::make_shared<SVM::Outils::DefinitionObjet>($1,"",@$.first_line,@$.last_line);
+	d->nouvelle_aide($2);
+	extension->nouvelle_dependance(d);
+}
+;
+
+prototype: prototype_type
+{
+	$$ = $1;
+}
+|	prototype_struct
+{
+	$$ = $1;
+}
+|	prototype_instruction
+{
+	$$ = $1;
+}
+|	prototype_fonction
+{
+	$$ = $1;
+}
+|	prototype_interruption
+{
+	$$ = $1;
+}
+|	prototype_sequenceur
+{
+	$$ = $1;
+}
+|	prototype_ordonanceur
+{
+	$$ = $1;
+}
+|	prototype_option
+{
+	$$ = $1;
+}
+|	prototype_argument
+{
+	$$ = $1;
+}
+|	prototype_arguments
+{
+	$$ = $1;
+}
+;
+
+
+prototype_type: TYPE point_entree_extension fin_ligne
+{
+	std::ostringstream oss;
+	oss << "TYPE " << $2;
+	$$ = oss.str(); 
+}
+;
+
+prototype_struct: STRUCT point_entree_extension fin_ligne
+{
+	std::ostringstream oss;
+	oss << "STRUCT " << $2;
+	$$ = oss.str(); 
+}
+;
+
+prototype_instruction: drapeaux_instruction INSTRUCTION PARAMETRES fin_ligne
+{
+	std::ostringstream oss;
+	oss << $1 << "INSTRUCTION" << $3;
+	$$ = oss.str();
+}
+;
+
+prototype_fonction: FUNCTION PARAMETRES fin_ligne
+{
+	std::ostringstream oss;
+	oss << "FUNCTION" << $2;
+	$$ = oss.str();
+}
+;
+
+prototype_interruption: INTERRUPTION point_entree_extension fin_ligne
+{
+	std::ostringstream oss;
+	oss << "INTERRUPTION " << $2;
+	$$ = oss.str(); 
+}
+;
+
+prototype_sequenceur: SEQUENCER point_entree_extension fin_ligne
+{
+	std::ostringstream oss;
+	oss << "SEQUENCER " << $2;
+	$$ = oss.str(); 
+}
+;
+
+prototype_ordonanceur: SCHEDULER point_entree_extension fin_ligne
+{
+	std::ostringstream oss;
+	oss << "SCHEDULER " << $2;
+	$$ = oss.str(); 
+}
+;
+
+prototype_option: OPTION point_entree_extension VALEUR_OPTION type_option fin_ligne
+{
+	std::ostringstream oss;
+	oss << "OPTION " << $2 << " -" << $3 << " " << $4;
+	$$ = oss.str(); 
+}
+;
+
+prototype_argument: ARGUMENT point_entree_extension type_argument fin_ligne
+{
+	std::ostringstream oss;
+	oss << "ARGUMENT " << $2 << " " << $3;
+	$$ = oss.str(); 
+}
+;
+
+prototype_arguments: ARGUMENTS point_entree_extension fin_ligne
+{
+	std::ostringstream oss;
+	oss << "ARGUMENTS " << $2;
+	$$ = oss.str(); 
+}
+;
+
+definitions: DEFINE fin_ligne liste_definitions
+{
+}
+;
+
+liste_definitions: definition
+{
+}
+| liste_definitions definition
+{
+}
+;
+
+definition:	definition_type
+{
+}
+|	definition_struct
+{
+}
+|	definition_instruction
+{
+}
+|	definition_fonction
+{
+}
+|	definition_interruption
+{
+}
+|	definition_sequenceur
+{
+}
+|	definition_ordonnanceur
+{
+}
+|	definition_option
+{
+}
+|	definition_argument
+{
+}
+|	definition_arguments
+{
+}
+|	definition_code
+{
+}
+;
+
+definition_type: prototype_type TEXTE fin_ligne fonction_delete fonction_copy_facultative fonction_compare_facultative fonction_constant_facultative fonction_print_facultative aide_facultative
+{
+	auto d = std::make_shared<SVM::Outils::DefinitionObjet>($1,$2,@2.first_line,@2.last_line);
+	d->nouvelle_fonction("delete",$4);
+	d->nouvelle_fonction("copy",$5);
+	d->nouvelle_fonction("compare",$6);
+	d->nouvelle_fonction("constant",$7);
+	d->nouvelle_fonction("print",$8);
+	d->nouvelle_aide($9);
+	extension->nouvelle_definition(d); 
+}
+;
+
+definition_struct: prototype_struct TEXTE fin_ligne fonction_delete fonction_copy_facultative aide_facultative
+{
+	auto d = std::make_shared<SVM::Outils::DefinitionObjet>($1,$2,@2.first_line,@2.last_line);
+	d->nouvelle_fonction("delete",$4);
+	d->nouvelle_fonction("copy",$5);
+	d->nouvelle_aide($6);
+	extension->nouvelle_definition(d); 
+}
+;
+
+definition_instruction: prototype_instruction TEXTE fin_ligne aide_facultative
+{
+	auto d = std::make_shared<SVM::Outils::DefinitionObjet>($1,$2,@2.first_line,@2.last_line);
+	d->nouvelle_aide($4);
+	extension->nouvelle_definition(d); 
+}
+;
+
+definition_fonction: prototype_fonction TEXTE fin_ligne aide_facultative
+{
+	auto d = std::make_shared<SVM::Outils::DefinitionObjet>($1,$2,@2.first_line,@2.last_line);
+	d->nouvelle_aide($4);
+	extension->nouvelle_definition(d); 
+}
+;
+
+definition_interruption: prototype_interruption aide_facultative
+{
+	auto d = std::make_shared<SVM::Outils::DefinitionObjet>($1,"",@$.first_line,@$.last_line);
+	d->nouvelle_aide($2);
+	extension->nouvelle_definition(d); 
+}
+;
+
+definition_sequenceur: prototype_sequenceur TEXTE fin_ligne fonction_create fonction_delete fonction_current fonction_attach fonction_detach fonction_print aide_facultative
+{
+	auto d = std::make_shared<SVM::Outils::DefinitionObjet>($1,$2,@2.first_line,@2.last_line);
+	d->nouvelle_fonction("create",$4);
+	d->nouvelle_fonction("delete",$5);
+	d->nouvelle_fonction("current",$6);
+	d->nouvelle_fonction("attach",$7);
+	d->nouvelle_fonction("detach",$8);
+	d->nouvelle_fonction("print",$9);
+	d->nouvelle_aide($10);
+	extension->nouvelle_definition(d); 
+}
+;
+
+definition_ordonnanceur: prototype_ordonanceur TEXTE fin_ligne fonction_create fonction_delete fonction_schedule fonction_notification_facultative fonction_attach fonction_detach fonction_print aide_facultative
+{
+	auto d = std::make_shared<SVM::Outils::DefinitionObjet>($1,$2,@2.first_line,@2.last_line);
+	d->nouvelle_fonction("create",$4);
+	d->nouvelle_fonction("delete",$5);
+	d->nouvelle_fonction("schedule",$6);
+	d->nouvelle_fonction("notification",$7);
+	d->nouvelle_fonction("attach",$8);
+	d->nouvelle_fonction("detach",$9);
+	d->nouvelle_fonction("print",$10);
+	d->nouvelle_aide($11);
+	extension->nouvelle_definition(d); 
+}
+;
+
+definition_option: prototype_option aide_facultative
+{
+	auto d = std::make_shared<SVM::Outils::DefinitionObjet>($1,"",@$.first_line,@$.last_line);
+	d->nouvelle_aide($2);
+	extension->nouvelle_definition(d); 
+}
+;
+
+definition_argument: prototype_argument aide_facultative
+{
+	auto d = std::make_shared<SVM::Outils::DefinitionObjet>($1,"",@$.first_line,@$.last_line);
+	d->nouvelle_aide($2);
+	extension->nouvelle_definition(d); 
+}
+;
+
+definition_arguments: prototype_arguments aide_facultative
+{
+	auto d = std::make_shared<SVM::Outils::DefinitionObjet>($1,"",@$.first_line,@$.last_line);
+	d->nouvelle_aide($2);
+	extension->nouvelle_definition(d); 
+}
+;
+
+definition_code:	CODE DEUX_POINTS fin_ligne_facultative TEXTE fin_ligne
+{
+	auto d = std::make_shared<SVM::Outils::DefinitionCode>($4,@4.first_line,@4.last_line);
+	extension->nouvelle_definition(d); 
+}
+;
+
+fonction_create: CREATE options_defaut DEUX_POINTS fin_ligne_facultative TEXTE fin_ligne
+{
+	$$ = std::make_shared<SVM::Outils::Fonction>($2,$5,@5.first_line,@5.last_line);
+}
+;
+
+fonction_delete: DELETE options_objet_defaut DEUX_POINTS fin_ligne_facultative TEXTE fin_ligne
+{
+	$$ = std::make_shared<SVM::Outils::Fonction>($2,$5,@5.first_line,@5.last_line);
+}
+;
+
+fonction_copy_facultative:
+{
+	$$ = SHARED_PTR(SVM::Outils::Fonction)();
+}
+|	fonction_copy
+{
+	$$ = $1;
+}
+;
+
+fonction_copy:	COPY options_objet_defaut DEUX_POINTS fin_ligne_facultative TEXTE fin_ligne
+{
+	$$ = std::make_shared<SVM::Outils::Fonction>($2,$5,@5.first_line,@5.last_line);
+}
+;
+
+fonction_compare_facultative:
+{
+	$$ = SHARED_PTR(SVM::Outils::Fonction)();
+}
+|	fonction_compare
+{
+	$$ = $1;
+}
+;
+
+fonction_compare:	COMPARE options_objet_defaut DEUX_POINTS fin_ligne_facultative TEXTE fin_ligne
+{
+	$$ = std::make_shared<SVM::Outils::Fonction>($2,$5,@5.first_line,@5.last_line);
+}
+;
+
+fonction_constant_facultative:
+{
+	$$ = SHARED_PTR(SVM::Outils::Fonction)();
+}
+|	fonction_constant
+{
+	$$ = $1;
+}
+;
+
+fonction_constant:	CONSTANT options_chaine_defaut DEUX_POINTS fin_ligne_facultative TEXTE fin_ligne
+{
+	$$ = std::make_shared<SVM::Outils::Fonction>($2,$5,@5.first_line,@5.last_line);
+}
+;
+
+fonction_print_facultative:
+{
+	$$ = SHARED_PTR(SVM::Outils::Fonction)();
+}
+|	fonction_print
+{
+	$$ = $1;
+}
+;
+
+fonction_print:	PRINT options_objet_defaut DEUX_POINTS fin_ligne_facultative TEXTE fin_ligne
+{
+	$$ = std::make_shared<SVM::Outils::Fonction>($2,$5,@5.first_line,@5.last_line);
+}
+;
+
+fonction_current: CURRENT options_objet_defaut DEUX_POINTS fin_ligne_facultative TEXTE fin_ligne
+{
+	$$ = std::make_shared<SVM::Outils::Fonction>($2,$5,@5.first_line,@5.last_line);
+}
+;
+
+fonction_schedule: SCHEDULE options_objet_defaut DEUX_POINTS fin_ligne_facultative TEXTE fin_ligne
+{
+	$$ = std::make_shared<SVM::Outils::Fonction>($2,$5,@5.first_line,@5.last_line);
+}
+;
+
+fonction_notification_facultative:
+{
+	$$ = SHARED_PTR(SVM::Outils::Fonction)();
+}
+|	fonction_notification
+{
+	$$ = $1;
+}
+;
+
+fonction_notification: NOTIFICATION options_objet_defaut DEUX_POINTS fin_ligne_facultative TEXTE fin_ligne
+{
+	$$ = std::make_shared<SVM::Outils::Fonction>($2,$5,@5.first_line,@5.last_line);
+}
+;
+fonction_attach: ATTACH options_objet_defaut DEUX_POINTS fin_ligne_facultative TEXTE fin_ligne
+{
+	$$ = std::make_shared<SVM::Outils::Fonction>($2,$5,@5.first_line,@5.last_line);
+}
+;
+
+fonction_detach: DETACH options_objet_defaut DEUX_POINTS fin_ligne_facultative TEXTE fin_ligne
+{
+	$$ = std::make_shared<SVM::Outils::Fonction>($2,$5,@5.first_line,@5.last_line);
+}
+;
+
+drapeaux_instruction:
+{
+	$$ = "";
+}
+| drapeaux_instruction SYSTEM
+{
+	$$ = $1;
+	$$ += "SYSTEM ";
+}
+| drapeaux_instruction WAITING
+{
+	$$ = $1;
+	$$ += "WAITING ";
+}
+| drapeaux_instruction OVERRIDE
+{
+	$$ = $1;
+	$$ += "OVERRIDE ";
+}
+;
+
+point_entree_extension: IDENTIFIANT POINT IDENTIFIANT
+{
+	std::ostringstream oss;
+	oss << $1 << "." << $3;
+	$$ = oss.str();
+}
+;
+
+aide_facultative:
+{
+	$$ = SHARED_PTR(std::string)();
+}
+|	aide
+{
+	$$ = std::make_shared<std::string>($1);
+}
+;
+
+aide:	HELP DEUX_POINTS citation fin_ligne
+{
+	$$ = $3;
+}
+;
+
+options_defaut:
+{
+	$$ = SVM::Outils::Fonction::Option::AUCUNE;
+}
+|	DEFAULT
+{
+	$$ = SVM::Outils::Fonction::Option::DEFAUT;
+}
+;
+
+/*
+options_objet:
+{
+	$$ = SVM::Outils::Fonction::Option::AUCUNE;
+}
+|	OBJECT
+{
+	$$ = SVM::Outils::Fonction::Option::OBJET;
+}
+;
+*/
+
+options_objet_defaut:
+{
+	$$ = SVM::Outils::Fonction::Option::AUCUNE;
+}
+|	DEFAULT
+{
+	$$ = SVM::Outils::Fonction::Option::DEFAUT;
+}
+|	OBJECT
+{
+	$$ = SVM::Outils::Fonction::Option::OBJET;
+}
+;
+
+options_chaine_defaut:
+{
+	$$ = SVM::Outils::Fonction::Option::AUCUNE;
+}
+|	DEFAULT
+{
+	$$ = SVM::Outils::Fonction::Option::DEFAUT;
+}
+|	STRING
+{
+	$$ = SVM::Outils::Fonction::Option::CHAINE;
+}
+;
+
+citation:	CHAINE
+{
+	$$ = $1;
+}
+|	fin_ligne_facultative TEXTE
+{
+	$$ = $2;
+}
+;
+
+fin_ligne_facultative:
+{
+}
+|	fin_ligne
+{
+}
+;
+
+fin_ligne: FIN_LIGNE
+{
+}
+|	fin_ligne FIN_LIGNE
+{
+}
+;
+
+type_option: TYPE_BOOLEEN
+{
+	$$ = "BLN";
+}
+|	type_argument
+{
+	$$ = $1;
+}
+;
+
+type_argument: TYPE_ENTIER
+{
+	$$ = "INT";
+}
+|	TYPE_CHAINE
+{
+	$$ = "STR";
+}
+;
+
+%%
+
+int outilssvmpluginanalyseurerror(YYLTYPE *llocp, void *scanner, SVM::Outils::ExtensionSP& extension, SVM::Outils::ErreurSP& erreur, std::string mesg)
+{
+	std::ostringstream oss;
+	oss << "Unable to parse input: " << mesg; 
+	erreur=std::make_shared<SVM::Outils::Erreur>(oss.str());
+	erreur->position(llocp->first_line,llocp->last_line);
+	return 1;
+}
+

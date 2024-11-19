@@ -1,0 +1,241 @@
+.TH "Simple Virtual Machine - Official plugin com" 7 "2020-12-10"
+.SH SYNOPSIS
+.B svm_plugin_com
+\- Simple Virtual Machine official plugin for terminal, file and network management. 
+.SH DESCRIPTION
+This plugin enables terminal, file and network management through an unified concept of devices.
+.SH INVOKATION
+This plugin can be added to the Simple Virtual Machine using the directive:
+.nf
+
+PLUGIN "svmcom.so"
+
+.fi
+.SH CONTENT
+.SH Devices
+Device are represented by the type defined as
+.B "TYPE com.device"
+where values are not copiable.
+Resources associated to a device are freed when the device value is freed from the memory.
+.SH Interruption
+.B "INTERRUPTION com.interrupted"
+This interruption is raised when a waiting instruction is unlocked by an event not related to devices, like hardware interruptions or scheduling events.
+.SH Operations
+.SS INSTRUCTION com.equal com.device 2 -> BLN
+This instruction returns TRUE when the two devices are sharing the same system resource.
+.SS FUNCTION com.device STRUCT -> com.device ?
+This function creates a device from a structure, using the structure type as device type.
+The function detects automatically all device operation functions (Please refer to custom device types below) except the open one.
+The function returns a null device when the close function is not defined.
+.SS WAITING INSTRUCTION com.prompt ( [ 'STDOUT' 'STDERR' ] ? STR ) : prompt ? [ 'STR' 'INT' ] : output_type -> [ STR INT ]
+This instruction prompts a message on the terminal and waits for an input on one line on the terminal.
+The value can be returned as a string or as an integer.
+When the input is not an integer when one was expected, a NUMERIC interruption is raised.
+.SS INSTRUCTION com.message [ 'STDOUT' 'STDERR' ] ? VALUE +
+This instruction outputs on the terminal serialised forms of values.
+The output is synchronised between the differents processes.
+.SS SYSTEM WAITING INSTRUCTION com.open PEP : device_type . * : parameters -> com.device
+This instruction opens a device and reserves the corresponding system resources.
+These resources are allocated using the device type and its parameters, and the built device is returned by the instruction.
+When the parameters do not comply with the device open function prototype, a DEVICE interruption is raised.
+.SS WAITING INSTRUCTION com.read com.device PEP : protocol [ VALUE KEYWORD ] * : parameters -> STR ?
+This instruction reads data from a device until a certain amount of bytes have been received.
+The amount of data read before being returned by the instruction is determined by the protocol indicated by a name and some parameters.
+The instruction returns a null string when the end of the stream is encountered.
+.P
+This instruction can raise a !com.interrupted interruption when the read has been interrupted by an hardware interruption or the scheduler, when the read function of the device allows it.
+.SS WAITING INSTRUCTION com.write com.device VALUE *
+This instruction writes data to the device.
+Each value is transformed into a string before being written to the device.
+.SS SYSTEM WAITING INSTRUCTION com.command com.device . * -> VALUE ?
+This instruction sends special commands to a device.
+The supported parameters and returned value depends directly on the device type.
+Any interruption can be raised by the command function of the device.
+.SS WAITING INSTRUCTION com.idle ( ( > | < ( PEP | { PEP [ VALUE KEYWORD ] * } ) ? : protocol ) : mode PTR + : device_arrays ) + -> PTR : active_device
+This instruction waits until a read or a write event is received on a device among a set of devices.
+The events can have three types:
+.RS 7
+.IP >
+write events
+.IP <
+read events
+.IP "< ( PEP | { PEP [ VALUE KEYWORD ] * } )"
+read events until the protocol detects enough data to be read without being blocked in a read operation.
+.P
+The devices are provided through pointers.
+Only com.device objects supporting the idle operation are taken into account.
+.P
+The instruction returns a pointer indicating which device is ready for a further operation.
+.P
+The instruction raise a !com.interrupted interruption when the wait has been interrupted by an hardware interruption or the scheduler.
+The instruction can also raise such interruption if a read on a device allowing an interruption is interrupted.
+.RE
+.SS OPTION com.tcp_queue -t INT
+This option changes the size of TCP awaiting connection queue (which is 20 by default) of com.tcp devices.
+.SH Protocols
+.SS com.all
+This protocol stops a read operation when an end of file character is sent on the device.
+.SS com.available
+This protocol returns immediately the data read on the device.
+.SS com.line
+This protocol stops a read operation when a specific character is sent on the device.
+This character is by default a carriage return \\n, but can be specified as parameter.
+.SS com.size
+This protocol stops a read operation when a certain number of bytes are sent on the device.
+The number of bytes is passed as parameter.
+.SS Custom protocols
+Custom protocols can be used by passing the protocol name and its parameters.
+A protocol is implemented by a plugin function having this prototype:
+.B "FUNCTION <plugin>.protocol_<entry> STR:buffer BLN:end_of_file [ VALUE KEYWORD ] *: parameters -> INT ?"
+The first parameter is the data read on the device and not returned to the program.
+The second parameter indicates whether an end of file has been detected on the device.
+The returned integer can be:
+.IP
+- null when the next block of data has been detected but is not yet complete,
+.IP
+- a positive or zero value when a block of data is complete. The value is the size of the block of data,
+.IP
+- a negative value when a block of data has been detected further in the data stream. The value is the number of bytes to discard.
+.SH Device types
+.SS Terminal
+The terminal is represented by three device types: one for STDIN (read-only), one for STDOUT (write-only) and one for STDERR (write-only).
+.P
+The open operation with the device type com.terminal will create a device on STDIN, STDOUT or STDERR depending on the keyword used as opening parameter.
+.P
+Read, write and idle operations are allowed.
+.P
+The read operation allows interruption and will raise !com.interrupted.
+.P
+The command operation supports:
+.IP "BLOCKING = <boolean>"
+to allow non-blocking operations,
+.IP "BUFFER = <boolean>"
+to allow buffered or immediate operations,
+.IP "ECHO = <boolean>"
+to remove terminal echoing of input.
+.IP "CLOSE = <boolean>"
+to close the terminal on device deletion.
+.P
+The idle operation is allowed depending on the device type.
+.SS File
+The files are represented by a single device type.
+The open operation with the com.file device type takes as parameters:
+.IP
+The acces mode ( < = read-only, > = write-only, <> = read-write, >> = append).
+Depending on the access mode, read and write operations are permitted.
+.IP
+The file name (as a string).
+.IP
+Optionally, the EXEC and PRIV keywords can tune the file access control when the open operation creates it. EXEC will create the file with execution rights, and PRIV with restricted access to the owning user.
+.P
+The read operation allows interruption and will raise !com.interrupted.
+.P
+The command operation supports:
+.IP "SEEK [ BEGIN END ] ? <integer>"
+to move the read/write cursor in the file. When the BEGIN or END keyword is specified, the move is absolute respectively from the begining or the end of the file.
+Otherwise, the current position is used as origin.
+The new cursor position is returned by the command.
+.P
+The idle operation is not supported by file devices.
+.SS TCP/IP
+The TCP network connections are represented by two devices types: the client one and the server one.
+The open operation with the com.tcp device type takes as parameters the type of connection ( < = server mode, > = client mode),  the IP address (as a string) and the port (as a string or integer).
+In client mode, the IP/port are the remote server ones, and in server mode, the IP/port are the accepted IP mask and the listening port.
+.P
+The read and write operations are supported only on the client type.
+.P
+The read operation allows interruption and will raise !com.interrupted.
+.P
+The command operation supports:
+.IP CLIENT
+on server type device.
+It returns a client type device once a client opened a connection to the server, or a null device when a non blocking accept would block, or raises a !com.interrupted when interrupted,
+.IP "BLOCKING = <boolean>"
+to allow non-blocking operations on client type devices,
+.IP "CLOSE [ < > ]"
+to partially close a client type device. When > is used, the write side is closed, and when < is used, the read part is closed.
+.IP "LINGER [ 'OFF' INT ]"
+to set the linger mode on the socket when a positive or nul integer is provided as linger duration, or to reset the linger mode when the OFF keyword is provided. 
+A DEVICE interruption is raised when the integer is negative.
+.IP "NODELAY <boolean>"
+This command enables the no delay transmission of packets (TCP Nagle algorithm turned off).
+The time optimisation is enable when the boolean is TRUE, and the bandwidth optimisation is enable when the boolean is FALSE.
+.IP REMOTE
+on a connection type device, to get the IP and port of the remote peer.
+The command returns a pointer to two strings, the first one containing the IP and the second one the port.
+.P
+The idle operation is allowed on server (without protocol) and client (with protocol) types.
+.SS "Custom device types"
+Device types can be created in other plugins, by defining a structure and associated functions:
+.P
+.B "STRUCT <plugin>.<entry>"
+This structure holds the resources linked to the device and its state.
+.P
+.B "FUNCTION <plugin>.device_<entry>_open <parameters> -> $<plugin>.<entry>"
+This function allows creation of the device structure from the parameters passed to the open operation.
+The structure is returned to the open operation that will encapsulate it into a device.
+This function is mandatory.
+.P
+.B "FUNCTION <plugin>.device_<entry>_print $<plugin>.<entry> -> STR"
+This function allows a device to be represented as a text, in particular in core dumps.
+This function is optional.
+.P
+.B "FUNCTION <plugin>.device_<entry>_read $<plugin>.<entry> -> STR ?"
+This function is called when data need to be read from the device.
+A null string has to be returned when an end of stream is encountered.
+This function is optional.
+.P
+.B "FUNCTION <plugin>.device_<entry>_write $<plugin>.<entry> STR"
+This function is called when data need to be written to the device.
+This function is optional.
+.P
+.B "FUNCTION <plugin>.device_<entry>_idle $<plugin>.<entry> MUTABLE INT 3"
+This function is called when the idle operation is invoked on the device.
+The three integers can be modified to indicate which file descriptors have to be monitored.
+The first integer is for read events, the second for write events, the last one for exceptions (not supported yet).
+This function is optional.
+.P
+.B "FUNCTION <plugin>.device_<entry>_command $<plugin>.<entry> . * -> VALUE ?"
+This function is called when the command operation is invoked on the device.
+The arguments and the returned value are device dependant.
+This function is optional.
+.P
+.B "FUNCTION <plugin>.device_<entry>_close $<plugin>.<entry> -> BLN"
+This function is called when the com.device object is deleted.
+The code of this function can release device resources, but shall not delete the structure.
+The function returns TRUE when the structure held by the device has to be released and destroyed by the device.
+This function is mandatory, and the device creation will be aborted if this function is not defined.
+.SH EXAMPLES
+.SS Terminal
+.nf
+	:memory com.device/i, com.device/o, STR/l, STR/p
+	:com.prompt "login:" STR -> &l
+	:com.open com.terminal STDIN -> &i
+	:com.open com.terminal STDOUT -> &o
+	:com.write @&o "password:"
+	:com.command @&i ECHO=FALSE
+	:com.read @&i com.line -> &p
+	:com.command @&i ECHO=TRUE
+.fi
+.SS File
+.nf
+	:memory com.device/d, STR/s
+	:com.open com.file <> "file" -> &d
+	:com.read @&d com.all -> &s
+	:com.command @&d SEEK BEGIN 0
+	:com.write @&d "<" @&s ">"
+.fi
+.SS TCP
+.nf
+	:memory com.device/s, com.device/c, STR/t
+	:com.open com.tcp < "localhost" "http" -> &s
+	:com.command @&s CLIENT -> &c
+	:com.read @&c com.line -> &t
+	:com.write @&c "<" @&t ">"
+	:com.command @&c CLOSE >
+.fi
+.SH SEE ALSO
+.BR svm (1)
+for help on the Simple Virtual Machine.
+.SH AUTHOR
+The Simple Virtual Machine is designed, implemented and maintained by Julien Bruguier <===EMAILCONTACT===>.

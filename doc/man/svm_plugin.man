@@ -1,0 +1,947 @@
+.TH "Simple Virtual Machine - Plugin generator" 1 "2020-12-10"
+.SH NAME
+.BR svm_plugin
+\- generates plugin code or generates a plugin code canevas for the Simple Virtual Machine.
+.SH SYNOPSIS
+svm_plugin [-i input_file] [-o output_file] [-c] [-l] [-d directory] [-u diff_tool] [-q] [-g] [-f] [-h] [-v] 
+.SH DESCRIPTION
+This commands produces a shell script generating a SVM plugin source directory.
+The generated script can be used to automate a Simple Virtual Machine plugin creation.
+.P
+This generator can:
+ - either produce a complete plugin directory from a description file (useful for reasonable plugins needing maintenance),
+ - or produce a generic code canevas to complete by hand from a plugin configuration string (useful for big plugins needing full code customisation).
+The second flavor is also recommended for beginners in plugin creation, as the producted code will drive the implementation.
+.P
+The generated code can be produced in:
+  - C,
+  - C++.
+.P
+The generated plugin provides:
+  - a simple Makefile for local build and local testing,
+  - a full Autotools suite for wide build and distribution.
+
+.SH OPTIONS
+.TP
+.B -i input_file
+By default, the svm_plugin command reads its input on the standard input.
+This option overrides this by specifying a file.
+The extension .svm_plugin can be used for such files.
+Please refer to
+.BR svm_plugins (7)
+for more details.
+.TP
+.B -o output_file
+By default, the svm_plugin command writes its output on the standard output.
+This option overrides this by specifying a file.
+The output text is a shell script (See 
+.BR sh (1)
+for more details) producing the plugin canevas when executed.
+When this option is set, the resulting file is set executable to the current user.
+.TP
+.B -l
+By default, the svm_plugin command generates a build suite for Autotools with an empty license file.
+This option removes this empty license file.
+Autotools then provides a default one.
+.TP
+.B -p
+By default, the script simply patches the generated files.
+This option saves the generated files before patching them and produces a script to update inline patches.
+.TP
+.B -d directory
+By default, the script generates the plugin files in a directory named svmplugin<plugin name>.
+This option changes the directory name.
+.TP
+.B -q
+By default, the svm_plugin command advertises process stages on the standard error.
+This option suppresses this output.
+Only errors will be displayed.
+.TP
+.B -f
+Force generation in description mode without update mode by removing previous generated directory.
+This option is exclusive with options -g and -u.
+.TP
+.B -h
+Displays the command help message.
+.TP
+.B -v
+Displays the Simple Virtual Machine plugin generator license and version.
+.SH FULL DESCRIPTION MODE
+In this mode, the code generator will produce a ready to compile plugin from a description file.
+The syntax of this file decorates the regular plugin configuration string by adding sections with text pasted to the files
+during the plugin generation.
+.P
+The elements in the files have a common syntax:
+.TP
+.B Comment
+A comment starts with a sharp on a line until the end of the line.
+.TP
+.B Object
+An object follows the syntax of one line of the plugin configuration string and can be followed by a text and several sections.
+.TP
+.B String
+A textual value can be specified between double-quotes on a single line:
+.nf
+
+"A text on a single line, with \\"double-quotes\\" inside."
+
+.fi
+.TP
+.B Block
+A multi-line text can be specified from
+.I %{
+at the end of a line until the next
+.I %}
+at the beginning of a line:
+.nf
+
+%{
+A text
+on several lines
+with %} not at the beginning of a line.
+%}
+
+.fi
+An empty multi-line string can be written:
+.nf
+
+%{}
+
+%{ }
+
+%{%}
+
+%{ %}
+
+%{
+%}
+
+.fi
+The block delimiters can be replaced by
+.I ${
+and
+.IR $} ,
+or by
+.I :{
+and
+.I :}
+when needed.
+.TP
+.B Section
+A section starts with a header line made of an identifier used as key, potentially followed by another identifier used as option, and ending by a colon.
+The content of the section follows its header, like this:
+.nf
+
+section:
+%{
+text
+%}
+
+section option: "text"
+
+section: "text"
+%{
+text
+%}
+
+.fi
+The content of each section depends on the session key.
+.TP
+.B Anonymous section
+An anonymous section can be attached to an object by writting the section after the object line.
+An anonymous section has no header:
+.nf
+
+OBJECT
+%{
+anonymous section
+%}
+
+.fi
+.SS The header part
+The header of the file contains only one object:
+.nf
+
+PLUGIN <name>
+
+.fi
+followed by these sections, in any order:
+.TP
+.B author : <string>
+Specifies first name and last name of the author of the plugin.
+.TP
+.B changelog : <string> OR <block>
+Specifies the change log of the plugin.
+.TP
+.B checks : <block>
+Specifies which checks has to be performed before compilation in
+.I configure.ac
+using the m4 syntax.
+.TP
+.B code : <block>
+Specifies the code of the plugin containing the declarations of struct, classes and functions all the functions expect the configuration one can access.
+.TP
+.B comment <identifier> : <string> <string> <string>
+Specifies how to insert a comment in a file.
+.IP
+The identifier is the file type.
+.IP
+The first string is the opening line of the comment.
+The second string is the prefix on each comment line.
+The last string is the closing line of the comment.
+.IP
+The file types source (for C/C++ files), shell (for bash scripts), make (for makefile and automake files), conf (for autoconf files) and svm (for tests) are automatically defined, but can be overridden.
+.IP
+This section can be present several times.
+.TP
+.B compile : <string>
+Specifies extra compiler line command options.
+.TP
+.B date : <string>
+Specifies the creation date of the plugin.
+The date format shall follow the ISO standard: YYYY-MM-DD.
+.TP
+.B description : <block>
+Specifies the full description of the plugin in the manual page.
+.TP
+.B example : <string> <block>
+Specifies an example of plugin usage in the manual page.
+The string contains a title for the example, and the block contains the text of the example.
+This section can be present several times.
+.TP
+.B file [ <identifier> ] : <string> <block>
+Specifies a new file to integrate to the plugin.
+The name of the file relative to the source directory of the plugin is specified in the string, and its content in the block.
+.IP
+When an identifier is added, the short licence is added to the top of the file using the identifier as file type comment scheme.
+.IP
+This section can be present several times.
+.TP
+.B finalisation : <block>
+Specifies the code to execute when the plugin is destroyed.
+.TP
+.B includes : <block>
+Specifies the code to include headers, before any function.
+.TP
+.B initialisation : <block>
+Specifies the code to execute when the plugin is created.
+.TP
+.B lang : <string>
+Specifies the language of the plugin.
+The content of the value is used in the -std option of the compiler, the C++ compiler is used when the value contains the string "++".
+If the value is "C", the C compiler with default standard is used.
+If the value is "C++", the C++ compiler is used with C++14 standard.
+.TP
+.B license : <string> OR <block>
+Specifies the license of the plugin.
+When not specified, the GPLv3 is used.
+.TP
+.B link : <string>
+Specifies extra linker line command options.
+.TP
+.B maintainer : <string>
+Specifies first name, last name and email of the maintainer of the plugin.
+.TP
+.B news : <block>
+Specifies NEWS file.
+.TP
+.B patch : <string> <block>
+Specifies a patch to apply on a generated file.
+The name of the file relative to the source directory of the plugin is specified in the string, and the patch content in the block.
+This section can be present several times.
+.TP
+.B readme : <block>
+Specifies README file.
+.TP
+.B seealso : <block>
+Specifies extra See Also in the manual page.
+.TP
+.B shell : <block>
+Specifies shell commands to apply on the generated plugin.
+The commands are run in the source directory of the plugin in debug mode.
+These commands can be use to alter the generated files.
+.TP
+.B startup : <block>
+Specifies the code to execute after the boot phase, between schedulers start and application processes start.
+.TP
+.B synopsis : <block>
+Specifies a short description of the plugin in the manual page.
+.TP
+.B test : <string> [ <block> ] <block>
+Specifies a new test to integrate to the plugin.
+The name of the test define a SVM file in the test directory. This file name can contain only letters, digits and underscores.
+The content of the file is half generated, half given in the block.
+The generated part contains the sheebang to the Simple Virtual Machine, the LOG directive and the plugin include.
+When two blocks are specified, the first block shall contain the options and arguments to be passed to the tested plugin. This block can not contain carriage returns.
+.IP
+This section can be present several times.
+.TP
+.B test : initialisation <block>
+Specifies a test initialisation shell script.
+.IP
+This script can be used to setup the test environment.
+In this script, the SVM binaries corresponding to the plugin machine should be called using the respective shell variables: $svm, $svm_plugin and $svm_config.
+.TP
+.B test : finalisation <block>
+Specifies a test finalisation shell script.
+.IP
+This script can be used to clean the test environment.
+In this script, the SVM binaries corresponding to the plugin machine should be called using the respective shell variables: $svm, $svm_plugin and $svm_config.
+.TP
+.B title : <string>
+Specifies a title for the manual page and the default usage.
+.TP
+.B usage : <string> OR <block>
+Specifies in short the license.
+When not specified, use the GPLv3 usage.
+.TP
+.B version : <string>
+Specifies the version of the plugin.
+.P
+Each section is present at most once unless specified and has a default value when not present.
+.SS The dependencies part
+This part of the file is optional.
+When present, it shall start with the USE keyword on a line.
+After this keyword, the dependency objects can be specified like in the plugin configuration string.
+Each dependency object can be followed by the optional section:
+.TP
+.B help : <string> OR <block>
+Contains the help text describing why this dependency is present in the plugin manual page.
+.SS The definitions part
+The definition part starts with the DEFINE keyword, followed by the list of objects defined in the plugin like in the plugin configuration string.
+In each section generating a function below, the
+.I void*
+.B svm
+references the Simple Virtual Machine pointer.
+Each category of object uses different sections:
+.TP
+.B Types
+.RS 7
+.TP
+.I Anonymous section (Mandatory)
+Specifies the content of the C/C++ struct of the type.
+The generated C++ type is
+.I type_<name>
+and the generated C type is
+.IR type_<name>_t .
+.TP
+.I delete [ object OR default ] : <block> (Mandatory)
+Specifies the destructor of the type.
+ - No option: no generated code, the object is referenced by the
+.I void*
+.B handler
+,
+ - object: generates type conversion code, the object is referenced by the
+.I type_<name>*
+.B object
+,
+ - default: generates code for trivial destruction of the object. The
+.I type_<name>*
+.B object
+can be used to modify the value before deletion.
+.TP
+.I copy [ object OR default ] : <block> (Optional)
+Specifies the copy constructor of the type.
+ - No option: no generated code, the object is referenced by the
+.I const void*
+.B handler
+,
+ - object: generates type conversion code, the object is referenced by the
+.I const type_<name>*
+.B object
+,
+ - default: generates code for trivial copy of the object. The
+.I const type_<name>*
+.B object
+and
+.I type_<name>*
+.B copy
+can be used to modify the copy.
+.TP
+.I compare [ object OR default ] : <block> (Optional)
+Specifies the compare operator of the type.
+ - No option: no generated code, the objects are referenced by the
+.I const void*
+.B handler_left
+and
+.I const void*
+.B handler_right
+,
+ - object: generates type conversion code, the objects are referenced by the
+.I const type_<name>*
+.B object_left
+and
+.I const type_<name>*
+.B object_right
+,
+ - default: generates code for trivial equivalence comparison of the two objects. The
+.I const type_<name>*
+.B object_left
+and
+.I const type_<name>*
+.B object_right
+can be used to modify the comparison. The trivial equivalence comparison is fully performed only in C++.
+.TP
+.I constant [ string OR default ] : <block> (Optional)
+Specifies the constant constructor of the type.
+ - No option: no generated code, the value is referenced by the
+.I const SVM_String
+.B value
+,
+ - string: generates type conversion code, the object is referenced by the
+.I const std::string
+.B string
+(available only in C++),
+ - default: generates code for trivial construction from a string of the object. The
+.I const std::string
+.B string
+(available only in C++) can be used to read the value and
+.I const type_<name>*
+.B object
+can be used to modify the object.
+.TP
+.I print [ object OR default ] : <block> (Optional)
+Specifies the string conversion of the type.
+ - No option: no generated code, the object is referenced by the
+.I const void*
+.B handler
+,
+ - object: generates type conversion code, the object is referenced by the
+.I const type_<name>*
+.B object
+,
+ - default: generates code for trivial conversion of the object. The
+.I const type_<name>*
+.B object
+and
+.I std::string/char*
+.B string
+can be used to access the object and modify the string. The trivial conversion is fully performed only in C++.
+.TP
+.I help : <string> OR <block> (Optional)
+Specifies the help for this type in the manual page.
+.RE
+.TP
+.B Instructions
+.RS 7
+.TP
+.I Anonymous section (Mandatory)
+Specifies the actions done by the instruction.
+The instruction parameters are accessible with the
+.I SVM_Size
+.B argc
+and
+.I SVM_Parameter[]
+.B argv
+variables.
+The C/C++ macros:
+.nf
+ARGV_VALUE(index,type)
+ARGV_PLUGIN(index,plugin,name)
+ARGV_MARKER(index)
+ARGV_KEYWORD(index)
+NEW_VALUE(type,value)
+NEW_PLUGIN(plugin,name,value)
+NEW_STRING(raw_string)
+RAW_STRING(svm_string)
+NEW_NULL_VALUE(type)
+NEW_NULL_PLUGIN(plugin,name)
+ERROR_INTERNAL(irq,message)
+ERROR_EXTERNAL(plugin,name,message)
+CONST_PEP(plugin,name)
+CURRENT(object)
+RETURN
+VARIABLE_GLOBAL(variable)
+VARIABLE_LOCAL(variable)
+VARIABLE_DELETE(variable)
+.fi
+can be used to shorten the code on basic parameters access and various common operations.
+When the instruction does not return a value, a C/C++ return statement is automatically added at the end of the code.
+.TP
+.I help : <string> OR <block> (Optional)
+Specifies the help for this instruction in the manual page.
+When the instruction is flagged OVERRIDE, the help is not generated for this instruction.
+.RE
+.TP
+.B Interruptions
+.RS 7
+.TP
+.I help : <string> OR <block> (Optional)
+Specifies the help for this interruption in the manual page.
+.RE
+.TP
+.B Schedulers
+.RS 7
+.TP
+.I Anonymous section (Mandatory)
+Specifies the content of the scheduler struct.
+Specifies the content of the C/C++ struct of the structure.
+The generated C++ type is
+.I scheduler_<name>
+and the generated C type is
+.IR scheduler_<name>_t .
+.TP
+.I create [ default ] : <block> (Mandatory)
+Specifies the constructor of the scheduler struct.
+ - No option: no generated code,
+ - default: generates code for trivial construction of the object. The
+.I const scheduler_<name>*
+.B object
+can be used to initialise the object. The trivial construction is fully performed only in C++.
+.TP
+.I delete [ object OR default ] : <block> (Mandatory)
+Specifies the destructor of the scheduler struct.
+ - No option: no generated code, the object is referenced by the
+.I void*
+.B handler
+,
+ - object: generates type conversion code, the object is referenced by the
+.I scheduler_<name>*
+.B object
+,
+ - default: generates code for trivial destruction of the object. The
+.I scheduler_<name>*
+.B object
+can be used to modify the value before deletion.
+.TP
+.I schedule [ object OR default ] : <block> (Mandatory)
+Specifies the scheduling function of the scheduler.
+ - No option: no generated code, the scheduler structure is referenced by the
+.I void*
+.B handler
+,
+ - object: generates type conversion code, the scheduler structure is referenced by the
+.I scheduler_<name>*
+.B object
+,
+ - default: generates code for trivial scheduling (no operation). The scheduler structure is referenced by the 
+.I scheduler_<name>*
+.BR object .
+.RS 7
+The process to schedule is referenced by the
+.I SVM_Process
+.B process
+, the process state is referenced by the
+.I SVM_Process_State
+.BR state .
+.RE
+.TP
+.I notification [ object OR default ] : <block> (Optional)
+Specifies the notification function of the scheduler.
+ - No option: no generated code, the scheduler structure is referenced by the
+.I void*
+.B handler
+,
+ - object: generates type conversion code, the scheduler structure is referenced by the
+.I scheduler_<name>*
+.B object
+,
+ - default: generates code for trivial notification (no operation). The scheduler structure is referenced by the 
+.I scheduler_<name>*
+.BR object .
+.RS 7
+The notification type is referenced by the
+.I SVM_Notification_Type
+.B type
+, the timer is referenced by the
+.I unsigned long int
+.BR parameter .
+.RE
+.TP
+.I attach [ object OR default ] : <block> (Mandatory)
+Specifies the attach function of the scheduler.
+ - No option: no generated code, the scheduler structure is referenced by the
+.I void*
+.B handler
+,
+ - object: generates type conversion code, the scheduler structure is referenced by the
+.I scheduler_<name>*
+.B object
+,
+ - default: generates code for trivial attachment (no operation). The scheduler structure is referenced by the 
+.I scheduler_<name>*
+.BR object .
+.RS 7
+The process to attach is referenced by the
+.I SVM_Process
+.B process
+, the parameter is referenced by the
+.I unsigned long int
+.BR parameter .
+.RE
+.TP
+.I detach [ object OR default ] : <block> (Mandatory)
+Specifies the detach function of the scheduler.
+ - No option: no generated code, the scheduler structure is referenced by the
+.I void*
+.B handler
+,
+ - object: generates type conversion code, the scheduler structure is referenced by the
+.I scheduler_<name>*
+.B object
+,
+ - default: generates code for trivial detachment (no operation). The scheduler structure is referenced by the 
+.I scheduler_<name>*
+.BR object .
+.RS 7
+The process to detach is referenced by the
+.I SVM_Process
+.B process
+, the parameter is referenced by the
+.I unsigned long int
+.BR parameter .
+.RE
+.TP
+.I print [ object OR default ] : <block> (Mandatory)
+Specifies the string conversion of the scheduler structure.
+ - No option: no generated code, the object is referenced by the
+.I const void*
+.B handler
+,
+ - object: generates type conversion code, the object is referenced by the
+.I const scheduler_<name>*
+.B object
+,
+ - default: generates code for trivial conversion of the object. The
+.I const scheduler_<name>*
+.B object
+and
+.I std::string/char*
+.B string
+can be used to access the object and modify the string. The trivial conversion is fully performed only in C++.
+.TP
+.I help : <string> OR <block> (Optional)
+Specifies the help for this scheduler in the manual page.
+.RE
+.TP
+.B Sequencers
+.RS 7
+.TP
+.I Anonymous section (Mandatory)
+Specifies the content of the sequencer struct.
+Specifies the content of the C/C++ struct of the structure.
+The generated C++ type is
+.I sequencer_<name>
+and the generated C type is
+.IR sequencer_<name>_t .
+.TP
+.I create [ default ] : <block> (Mandatory)
+Specifies the constructor of the sequencer struct.
+ - No option: no generated code,
+ - default: generates code for trivial construction of the object. The
+.I const sequencer_<name>*
+.B object
+can be used to initialise the object. The trivial construction is fully performed only in C++.
+.TP
+.I delete [ object OR default ] : <block> (Mandatory)
+Specifies the destructor of the sequencer struct.
+ - No option: no generated code, the object is referenced by the
+.I void*
+.B handler
+,
+ - object: generates type conversion code, the object is referenced by the
+.I sequencer_<name>*
+.B object
+,
+ - default: generates code for trivial destruction of the object. The
+.I sequencer_<name>*
+.B object
+can be used to modify the value before deletion.
+.TP
+.I current [ object OR default ] : <block> (Mandatory)
+Specifies the sequencing function of the sequencer.
+ - No option: no generated code, the sequencer structure is referenced by the
+.I void*
+.B handler
+,
+ - object: generates type conversion code, the sequencer structure is referenced by the
+.I sequencer_<name>*
+.B object
+,
+ - default: generates code for trivial sequencing (no operation). The sequencer structure is referenced by the 
+.I sequencer_<name>*
+.BR object .
+.TP
+.I attach [ object OR default ] : <block> (Mandatory)
+Specifies the attach function of the sequencer.
+ - No option: no generated code, the sequencer structure is referenced by the
+.I void*
+.B handler
+,
+ - object: generates type conversion code, the sequencer structure is referenced by the
+.I sequencer_<name>*
+.B object
+,
+ - default: generates code for trivial attachment (no operation). The sequencer structure is referenced by the 
+.I sequencer_<name>*
+.BR object .
+.RS 7
+The process to attach is referenced by the
+.I SVM_Process
+.B process
+, the parameters are referenced by the
+.I SVM_Size
+.B argc 
+and
+.I SVM_Parameter[]
+.BR argv .
+.RE
+.TP
+.I detach [ object OR default ] : <block> (Mandatory)
+Specifies the detach function of the sequencer.
+ - No option: no generated code, the sequencer structure is referenced by the
+.I void*
+.B handler
+,
+ - object: generates type conversion code, the sequencer structure is referenced by the
+.I sequencer_<name>*
+.B object
+,
+ - default: generates code for trivial detachment (no operation). The sequencer structure is referenced by the 
+.I sequencer_<name>*
+.BR object .
+.RS 7
+The process to attach is referenced by the
+.I SVM_Process
+.B process
+, the parameters are referenced by the
+.I SVM_Size
+.B argc 
+and
+.I SVM_Parameter[]
+.BR argv .
+.RE
+.TP
+.I print [ object OR default ] : <block> (Mandatory)
+Specifies the string conversion of the sequencer structure.
+ - No option: no generated code, the object is referenced by the
+.I const void*
+.B handler
+,
+ - object: generates type conversion code, the object is referenced by the
+.I const sequencer_<name>*
+.B object
+,
+ - default: generates code for trivial conversion of the object. The
+.I const sequencer_<name>*
+.B object
+and
+.I std::string/char*
+.B string
+can be used to access the object and modify the string. The trivial conversion is fully performed only in C++.
+.TP
+.I help : <string> OR <block> (Optional)
+Specifies the help for this sequencer in the manual page.
+.RE
+.TP
+.B Structures
+.RS 7
+.TP
+.I Anonymous section (Mandatory)
+Specifies the content of the C/C++ struct of the structure.
+The generated C++ type is
+.I struct_<name>
+and the generated C type is
+.IR struct_<name>_t .
+.TP
+.I delete [ object OR default ] : <block> (Mandatory)
+Specifies the destructor of the structure.
+ - No option: no generated code, the object is referenced by the
+.I void*
+.B handler
+,
+ - object: generates type conversion code, the object is referenced by the
+.I struct_<name>*
+.B object
+,
+ - default: generates code for trivial destruction of the object. The
+.I struct_<name>*
+.B object
+can be used to modify the value before deletion.
+.TP
+.I copy [ object OR default ] : <block> (Optional)
+Specifies the copy constructor of the structure.
+ - No option: no generated code, the object is referenced by the
+.I const void*
+.B handler
+,
+ - object: generates type conversion code, the object is referenced by the
+.I const struct_<name>*
+.B object
+,
+ - default: generates code for trivial copy of the object. The
+.I const struct_<name>*
+.B object
+and
+.I struct_<name>*
+.B copy
+can be used to modify the copy.
+.TP
+.I help : <string> OR <block> (Optional)
+Specifies the help for this structure in the manual page.
+.RE
+.TP
+.B Functions
+.RS 7
+.TP
+.I Anonymous section (Mandatory)
+Specifies the actions done by the function.
+The function parameters are accessible with the
+.I SVM_Size
+.B argc
+and
+.I SVM_Parameter[]
+.B argv
+variables.
+The C/C++ macros:
+.nf
+ARGV_VALUE(index,type)
+ARGV_PLUGIN(index,plugin,name)
+ARGV_MARKER(index)
+ARGV_KEYWORD(index)
+ARGV_STRUCT(index,plugin,name)
+ARGV_VARIABLE(index)
+NEW_VALUE(type,value)
+NEW_PLUGIN(plugin,name,value)
+NEW_STRUCT(plugin,name,value)
+NEW_STRING(raw_string)
+RAW_STRING(svm_string)
+NEW_NULL_VALUE(type)
+NEW_NULL_PLUGIN(plugin,name)
+NEW_NULL_STRUCT(plugin,name)
+ERROR_INTERNAL(irq,message)
+ERROR_EXTERNAL(plugin,name,message)
+CONST_PEP(plugin,name)
+CURRENT(object)
+RETURN
+VARIABLE_GLOBAL(variable)
+VARIABLE_LOCAL(variable)
+VARIABLE_DELETE(variable)
+.fi
+can be used to shorten the code on basic parameters access and various common operations.
+When the function does not return a value, a C/C++ return statement is automatically added at the end of the code.
+.TP
+.I help : <string> OR <block> (Optional)
+Specifies the help for this instruction in the manual page.
+.RE
+.TP
+.B Options
+.RS 7
+.TP
+.I help : <string> OR <block> (Optional)
+Specifies the help for this option in the manual page.
+.RE
+.TP
+.B Arguments
+.RS 7
+.TP
+.I help : <string> OR <block> (Optional)
+Specifies the help for this argument in the manual page.
+.RE
+.TP
+.B Arguments(s)
+.RS 7
+.TP
+.I help : <string> OR <block> (Optional)
+Specifies the help for this extra arguments array in the manual page.
+.RE
+.TP
+.B C/C++ code inclusion
+.RS 7
+It is also possible to insert C/C++ code between two Simple Virtual Machine objects, using the code directive:
+.nf
+code:
+%{
+	// C/C++ code
+%}
+.fi
+.P
+Unlike the code directive present in the plugin header, the code of this directive is inserted at the corresponding place in the generated objects sequence.
+This insertion allows C/C++ definitions using structures and functions created above the code directive by the plugin generator.
+.RE
+.SS Substitutions
+In all sections related to help (help, synopsis, description, example), some specific macros can be specified to be replaced by deployment values:
+.TP
+.B ===PLUGINLIB===
+This macro will be replaced by the file name of the plugin, with its full installation path.
+The base name used in this substitution is the generated by default one. Do not use this macro when you plan to use another name.
+.TP
+.B ===PLUGINMACHINELIB===
+This macro will be replaced by the file name of the plugin, with its relative installation path.
+The base name used in this substitution is the generated by default one. Do not use this macro when you plan to use another name.
+.TP
+.B ===PLUGINBINDIR===
+This macro will be replaced by the directory where binaries linked to the plugin will be installed.
+.TP
+.B ===PLUGINDATADIR===
+This macro will be replaced by the directory where static data files linked to the plugin will be installed.
+.TP
+.B ===PLUGININCLUDEDIR===
+This macro will be replaced by the directory where header files linked to the plugin will be installed.
+.TP
+.B ===PLUGINLIBDIR===
+This macro will be replaced by the directory where the plugin itself and all related shared objects linked to the plugin will be installed.
+.TP
+.B ===PLUGINCONTACT===
+This macro will be replaced by the contact email of the creator of the plugin.
+.TP
+.B ===SVMBIN===
+This macro will be replaced by the file name of the Simple Virtual Machine binary, with its full installation path.
+The base name used in this substitution is the generated by default one. Do not use this macro when you plan to use another name.
+.TP
+.B ===SVMBINDIR===
+This macro will be replaced by the directory where the Simple Virtual Machine binary linked to the plugin will be installed.
+.TP
+.B ===SVMINCLUDEDIR===
+This macro will be replaced by the directory where the Simple Virtual Machine header files linked to the plugin will be installed.
+.TP
+.B ===SVMINTERFACEDIR===
+This macro will be replaced by the directory where the Simple Virtual Machine interface library linked to the plugin will be installed.
+.SS File example
+.nf
+
+PLUGIN exemple
+lang: "C++"
+title: "A minimal plugin example"
+includes:
+%{
+#include <string>
+%}
+DEFINE
+TYPE exemple.type
+%{
+	explicit type_type(const std::string& s)
+	:_s(s) {}
+	operator std::string () const { return _s; }
+	private:
+		std::string _s;
+%}
+delete default:
+%{}
+#copy default:
+#%{}
+print default:
+%{}
+help: "Base type of this plugin"
+INSTRUCTION exemple.instruction STR -> exemple.type
+%{
+	auto s = ARGV_VALUE(0,string);
+	type_type *t = new type_type(std::string(s.string,s.size));
+	return NEW_PLUGIN(exemple,type,t);
+%}
+help: "Creates an instance of the base type of this plugin"
+
+.fi
+.SH RETURN VALUES
+The svm_plugin command returns 0 when the Simple Virtual Machine plugin generator shell script is created, and 1 otherwise.
+.P
+If an option is invalid, the command returns 2.
+.P
+.SH SEE ALSO
+.BR svm (1)
+for general documentation on the Simple Virtual Machine, in particular with plugin objects usage and low-level C/C++ plugin interface.
+.SH AUTHOR
+The Simple Virtual Machine is designed, implemented and maintained by Julien Bruguier <===EMAILCONTACT===>.
+.SH BUGS
+In case of bug on the virtual machine or on a plugin delivered with it, please send an email to the address above.
+Other plugins can not be covered here, so please contact preferably the author of the plugin whenever possible.
